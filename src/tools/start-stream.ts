@@ -40,7 +40,7 @@ import type { StartStreamArgs, MCPResponse } from '../types.js';
 interface StartStreamResponse {
   success: boolean;
   streamId: string;
-  streamNumber: number;
+  streamNumber: string;
   worktreePath: string;
   branchName: string;
   metadata: {
@@ -143,24 +143,11 @@ async function validateEnvironment(): Promise<void> {
  * @throws Error if worktree already exists at target path
  */
 async function generateStreamId(
-  title: string
-): Promise<{ streamId: string; streamNumber: number }> {
-  // Get next stream number from state manager
-  const streamNumber = await getNextStreamId();
-
-  // Slugify title
-  // - Convert to lowercase
-  // - Replace non-alphanumeric with hyphens
-  // - Remove leading/trailing hyphens
-  // - Limit to 50 characters
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
-
-  // Format: stream-042-add-authentication
-  const streamId = `stream-${streamNumber.toString().padStart(3, '0')}-${slug}`;
+  title: string,
+  subStreamOf?: string
+): Promise<{ streamId: string; streamNumber: string }> {
+  // Get next version-aware stream ID from state manager
+  const { streamId, streamNumber } = await getNextStreamId(title, subStreamOf);
 
   // Verify worktree doesn't already exist
   const worktreePath = join(config.WORKTREE_ROOT, streamId);
@@ -195,7 +182,7 @@ async function generateStreamId(
  */
 async function createMetadataFiles(
   args: StartStreamArgs,
-  streamInfo: { streamId: string; streamNumber: number }
+  streamInfo: { streamId: string; streamNumber: string }
 ): Promise<string[]> {
   const { streamId, streamNumber } = streamInfo;
   const streamDir = join(config.PROJECT_ROOT, '.project/plan/streams', streamId);
@@ -300,7 +287,7 @@ async function createMetadataFiles(
  */
 async function updateDashboardAndState(
   args: StartStreamArgs,
-  streamInfo: { streamId: string; streamNumber: number }
+  streamInfo: { streamId: string; streamNumber: string }
 ): Promise<void> {
   const { streamId, streamNumber } = streamInfo;
   const timestamp = new Date().toISOString();
@@ -377,7 +364,7 @@ async function updateDashboardAndState(
  */
 async function commitMetadata(
   args: StartStreamArgs,
-  streamInfo: { streamId: string; streamNumber: number },
+  streamInfo: { streamId: string; streamNumber: string },
   filesCreated: string[]
 ): Promise<string> {
   const { streamId } = streamInfo;
@@ -546,8 +533,8 @@ export async function startStream(args: StartStreamArgs): Promise<MCPResponse> {
     // Phase 1: Validation
     await validateEnvironment();
 
-    // Phase 2: Generate stream ID
-    const streamInfo = await generateStreamId(args.title);
+    // Phase 2: Generate stream ID (version-aware)
+    const streamInfo = await generateStreamId(args.title, args.subStreamOf);
     const { streamId, streamNumber } = streamInfo;
 
     // Phase 3: Create metadata files

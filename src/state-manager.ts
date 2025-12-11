@@ -27,6 +27,7 @@ import { join, dirname } from 'node:path';
 
 import { config } from './config.js';
 import type { LockInfo } from './types.js';
+import { getProjectMajorVersion, formatStreamNumber } from './utils/version.js';
 
 // ============================================================================
 // Interfaces
@@ -34,9 +35,27 @@ import type { LockInfo } from './types.js';
 
 /**
  * StreamState: Root state object persisted in STREAM_STATE.json
+ *
+ * Version-aware format (v0.2.0+):
+ *   - version: Current project major version
+ *   - versionCounters: Per-version stream counters
+ *   - streams: Stream registry
+ *
+ * Legacy format (v0.1.0):
+ *   - nextStreamId: Simple incrementing counter
+ *   - streams: Stream registry
+ *
+ * Migration happens automatically on first access after upgrade.
  */
 export interface StreamState {
-  nextStreamId: number;
+  // Version-aware fields (v0.2.0+)
+  version?: string;  // Current project major version (e.g., "15")
+  versionCounters?: Record<string, number>;  // Per-version counters
+
+  // Legacy field (v0.1.0) - deprecated but maintained for migration
+  nextStreamId?: number;
+
+  // Common fields
   streams: Record<string, StreamMetadata>;
   lastSync: string; // ISO timestamp
 }
@@ -47,7 +66,7 @@ export interface StreamState {
  */
 export interface StreamMetadata {
   streamId: string;
-  streamNumber: number;
+  streamNumber: number | string;  // number (legacy) or string (version-aware: "1500", "1500a")
   title: string;
   category: StreamCategory;
   priority: StreamPriority;
@@ -56,6 +75,7 @@ export interface StreamMetadata {
   updatedAt?: string; // ISO timestamp
   worktreePath: string;
   branch: string;
+  parentStreamId?: string;  // For sub-streams (e.g., "stream-1500-auth")
 }
 
 export type StreamCategory =
@@ -187,19 +207,247 @@ export async function withStateLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // ============================================================================
-// Stream ID Management
+// Stream ID Management (Version-Aware)
 // ============================================================================
 
 /**
- * Get next stream ID and increment counter
+ * Get next version-aware stream ID
  * Thread-safe via withStateLock
  *
- * @returns Next stream number (1, 2, 3, ...)
+ * Format: stream-{VERSION}{COUNTER}{SUFFIX}-{title}
+ * Examples:
+ *   - stream-1500-user-auth (v15, counter 0)
+ *   - stream-1523-api-refactor (v15, counter 23)
+ *   - stream-1500a-auth-tests (v15, counter 0, sub-stream a)
+ *
+ * @param title - Stream title for slug generation
+ * @param subStreamOf - Optional parent stream ID for sub-streams
+ * @returns Stream ID and formatted stream number
+ * @throws Error if capacity exhausted or invalid parent
  */
-export async function getNextStreamId(): Promise<number> {
+export async function getNextStreamId(
+  title: string,
+  subStreamOf?: string
+): Promise<{ streamId: string; streamNumber: string }> {
   return withStateLock(async () => {
     const state = await loadState();
-    const streamNumber = state.nextStreamId;
+
+    // Ensure state is migrated to version-aware format
+    const migratedState = await ensureVersionAwareState(state);
+
+    const projectVersion = getProjectMajorVersion();
+
+    // Detect version change
+    if (migratedState.version !== projectVersion) {
+      console.error(
+        `[state-manager] Project version changed: ${migratedState.version} → ${projectVersion}`
+      );
+      console.error(
+        `[state-manager] Starting new version counter at ${projectVersion}00`
+      );
+
+      migratedState.version = projectVersion;
+      // Don't reset old version counters (preserve history)
+      if (!migratedState.versionCounters![projectVersion]) {
+        migratedState.versionCounters![projectVersion] = 0;
+      }
+    }
+
+    // Handle sub-streams
+    if (subStreamOf) {
+      const result = generateSubStreamId(migratedState, subStreamOf, title);
+      await saveState(migratedState);
+      return result;
+    }
+
+    // Generate main stream ID
+    const counter = migratedState.versionCounters![projectVersion] || 0;
+
+    if (counter >= 100) {
+      throw new Error(
+        `Stream capacity exhausted for version ${projectVersion}. ` +
+          `Maximum 100 main streams (00-99) per version.\n` +
+          `Suggestions:\n` +
+          `  1. Create sub-stream of existing stream (e.g., stream-${projectVersion}00a)\n` +
+          `  2. Increment project version (${projectVersion} → ${parseInt(projectVersion) + 1})\n` +
+          `  3. Archive/cleanup old streams if no longer needed`
+      );
+    }
+
+    const streamNumber = formatStreamNumber(projectVersion, counter);
+    const slug = slugify(title);
+    const streamId = `stream-${streamNumber}-${slug}`;
+
+    // Increment counter
+    migratedState.versionCounters![projectVersion] = counter + 1;
+    await saveState(migratedState);
+
+    return { streamId, streamNumber };
+  });
+}
+
+/**
+ * Generate sub-stream ID (e.g., stream-1500a-tests)
+ * Sub-streams share the same version and counter as parent, with letter suffix
+ *
+ * @param state - Current stream state
+ * @param parentStreamId - Parent stream ID (e.g., "stream-1500-auth")
+ * @param title - Sub-stream title
+ * @returns Stream ID and formatted stream number
+ * @throws Error if parent invalid or capacity exhausted
+ */
+function generateSubStreamId(
+  state: StreamState,
+  parentStreamId: string,
+  title: string
+): { streamId: string; streamNumber: string } {
+  // Extract parent stream number (e.g., "stream-1500-auth" -> "1500")
+  const match = parentStreamId.match(/^stream-(\d{4})([a-z]?)-/);
+  if (!match) {
+    throw new Error(
+      `Invalid parent stream ID format: ${parentStreamId}\n` +
+        `Expected format: stream-{VERSION}{COUNTER}-{title}\n` +
+        `Example: stream-1500-user-auth`
+    );
+  }
+
+  const parentNumber = match[1]; // "1500"
+  const parentSuffix = match[2]; // "" or "a"
+
+  if (parentSuffix) {
+    throw new Error(
+      `Cannot create sub-stream of sub-stream: ${parentStreamId}\n` +
+        `Sub-streams can only be created from main streams.\n` +
+        `Create sub-stream of the parent stream instead.`
+    );
+  }
+
+  // Verify parent exists
+  if (!state.streams[parentStreamId]) {
+    throw new Error(
+      `Parent stream not found: ${parentStreamId}\n` +
+        `Ensure the parent stream exists before creating sub-streams.`
+    );
+  }
+
+  // Find next available letter suffix
+  const existingSubStreams = Object.keys(state.streams).filter(
+    (id) => id.startsWith(`stream-${parentNumber}`) && /stream-\d{4}[a-z]-/.test(id)
+  );
+
+  const usedSuffixes = existingSubStreams
+    .map((id) => {
+      const m = id.match(/stream-\d{4}([a-z])-/);
+      return m ? m[1] : null;
+    })
+    .filter(Boolean) as string[];
+
+  // Find first available letter
+  let suffix = 'a';
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(97 + i); // a-z
+    if (!usedSuffixes.includes(letter)) {
+      suffix = letter;
+      break;
+    }
+  }
+
+  if (usedSuffixes.length >= 26) {
+    throw new Error(
+      `Sub-stream capacity exhausted for ${parentStreamId}\n` +
+        `Maximum 26 sub-streams (a-z) allowed per main stream.\n` +
+        `Consider creating a new main stream instead.`
+    );
+  }
+
+  const slug = slugify(title);
+  const streamNumber = `${parentNumber}${suffix}`;
+  const streamId = `stream-${streamNumber}-${slug}`;
+
+  return { streamId, streamNumber };
+}
+
+/**
+ * Ensure state is in version-aware format
+ * Migrates legacy format (nextStreamId) to version-aware format
+ *
+ * @param state - Stream state (legacy or version-aware)
+ * @returns Version-aware state
+ */
+async function ensureVersionAwareState(state: StreamState): Promise<StreamState> {
+  // Already version-aware
+  if (state.version && state.versionCounters) {
+    return state;
+  }
+
+  // Migrate legacy state
+  console.error('[state-manager] Migrating to version-aware state format...');
+
+  const projectVersion = getProjectMajorVersion();
+
+  // Create version-aware state
+  const migratedState: StreamState = {
+    version: projectVersion,
+    versionCounters: {
+      [projectVersion]: 0, // Start fresh for current version
+    },
+    streams: state.streams,
+    lastSync: state.lastSync,
+  };
+
+  // Log legacy stream count
+  const legacyStreamCount = Object.keys(state.streams).length;
+  if (legacyStreamCount > 0) {
+    console.error(
+      `[state-manager] Preserved ${legacyStreamCount} existing streams in registry`
+    );
+    console.error(
+      `[state-manager] New streams will use version-aware numbering (e.g., stream-${projectVersion}00-*)`
+    );
+  }
+
+  return migratedState;
+}
+
+/**
+ * Slugify title for stream ID
+ * Converts title to lowercase, replaces spaces/special chars with hyphens
+ *
+ * @param title - Human-readable title
+ * @returns URL-safe slug
+ *
+ * Examples:
+ *   "User Authentication" -> "user-authentication"
+ *   "API Refactor (v2)" -> "api-refactor-v2"
+ */
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
+    .replace(/^-+|-+$/g, '') // Trim leading/trailing hyphens
+    .substring(0, 50); // Limit length
+}
+
+/**
+ * DEPRECATED: Legacy function for backward compatibility
+ * Use getNextStreamId(title, subStreamOf?) instead
+ *
+ * @deprecated Since v0.2.0 - Use version-aware getNextStreamId
+ * @returns Simple incrementing number (legacy format)
+ */
+export async function getNextStreamIdLegacy(): Promise<number> {
+  return withStateLock(async () => {
+    const state = await loadState();
+
+    // If already migrated, return error
+    if (state.version && state.versionCounters) {
+      throw new Error(
+        'State has been migrated to version-aware format. ' +
+          'Use getNextStreamId(title, subStreamOf?) instead of getNextStreamIdLegacy().'
+      );
+    }
+
+    const streamNumber = state.nextStreamId || 1;
 
     // Increment for next time
     state.nextStreamId = streamNumber + 1;
@@ -327,7 +575,16 @@ export async function listStreams(
   }
 
   // Sort by stream number (newest first)
-  streams.sort((a, b) => b.streamNumber - a.streamNumber);
+  // Handle both string (version-aware) and number (legacy) formats
+  streams.sort((a, b) => {
+    const aNum = typeof a.streamNumber === 'string'
+      ? parseInt(a.streamNumber.replace(/[a-z]/g, ''), 10)
+      : a.streamNumber;
+    const bNum = typeof b.streamNumber === 'string'
+      ? parseInt(b.streamNumber.replace(/[a-z]/g, ''), 10)
+      : b.streamNumber;
+    return bNum - aNum;
+  });
 
   return streams;
 }
@@ -443,11 +700,16 @@ function getLockPath(): string {
 }
 
 /**
- * Create initial state structure
+ * Create initial state structure (version-aware)
  */
 function createInitialState(): StreamState {
+  const projectVersion = getProjectMajorVersion();
+
   return {
-    nextStreamId: 1,
+    version: projectVersion,
+    versionCounters: {
+      [projectVersion]: 0,
+    },
     streams: {},
     lastSync: new Date().toISOString(),
   };
@@ -455,16 +717,34 @@ function createInitialState(): StreamState {
 
 /**
  * Validate state structure
+ * Supports both legacy and version-aware formats
  */
 function isValidState(state: any): state is StreamState {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    typeof state.nextStreamId === 'number' &&
-    state.nextStreamId > 0 &&
-    typeof state.streams === 'object' &&
-    typeof state.lastSync === 'string'
-  );
+  if (typeof state !== 'object' || state === null) {
+    return false;
+  }
+
+  // Must have streams and lastSync
+  if (typeof state.streams !== 'object' || typeof state.lastSync !== 'string') {
+    return false;
+  }
+
+  // Version-aware format (v0.2.0+)
+  if (state.version && state.versionCounters) {
+    return (
+      typeof state.version === 'string' &&
+      typeof state.versionCounters === 'object' &&
+      Object.values(state.versionCounters).every((v) => typeof v === 'number' && v >= 0)
+    );
+  }
+
+  // Legacy format (v0.1.0) - for migration
+  if (state.nextStreamId !== undefined) {
+    return typeof state.nextStreamId === 'number' && state.nextStreamId > 0;
+  }
+
+  // Invalid if neither format
+  return false;
 }
 
 /**

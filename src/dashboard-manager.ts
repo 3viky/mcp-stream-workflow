@@ -30,7 +30,7 @@ export interface DashboardData {
 
 export interface DashboardStream {
   streamId: string;
-  streamNumber: number;
+  streamNumber: number | string;  // number (legacy) or string (version-aware)
   title: string;
   status: StreamStatus;
   category: StreamCategory;
@@ -382,7 +382,16 @@ export function formatDashboard(data: DashboardData): string {
 `;
   } else {
     // Sort streams by stream number (descending, newest first)
-    const sorted = [...data.activeStreams].sort((a, b) => b.streamNumber - a.streamNumber);
+    // Handle both string and number formats
+    const sorted = [...data.activeStreams].sort((a, b) => {
+      const aNum = typeof a.streamNumber === 'string'
+        ? parseInt(a.streamNumber.replace(/[a-z]/g, ''), 10)
+        : a.streamNumber;
+      const bNum = typeof b.streamNumber === 'string'
+        ? parseInt(b.streamNumber.replace(/[a-z]/g, ''), 10)
+        : b.streamNumber;
+      return bNum - aNum;
+    });
 
     for (const stream of sorted) {
       const icon = getStatusIcon(stream);

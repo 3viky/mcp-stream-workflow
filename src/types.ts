@@ -65,7 +65,7 @@ export interface NoteToAgent {
 
 export interface Stream {
   id: string;
-  number: number;
+  number: number | string;  // number (legacy) or string (version-aware: "1500", "1500a")
   title: string;
   category: StreamCategory;
   priority: StreamPriority;
@@ -262,6 +262,7 @@ export interface StartStreamArgs {
   description?: string;
   estimatedPhases?: string[];
   tags?: string[];
+  subStreamOf?: string;  // Optional parent stream ID for creating sub-streams
 }
 
 // ============================================================================
