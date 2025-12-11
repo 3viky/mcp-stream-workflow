@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#
+# Post-Commit Hook for Stream Worktrees
+#
+# Purpose: Track commit count and trigger dashboard sync every 3-5 commits
+# Location: Installed to each worktree's .git/hooks/post-commit by start_stream
+#
+# This hook automatically:
+# 1. Increments commit counter
+# 2. Triggers dashboard sync when threshold reached (default: 3 commits)
+# 3. Resets counter after sync
+#
+# The dashboard sync runs in the background (non-blocking) and updates
+# STATUS_DASHBOARD.md in the main project with current progress.
+#
+
+set -e
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+WORKTREE_DIR="$(git rev-parse --show-toplevel)"
+COUNT_FILE="${WORKTREE_DIR}/.git/info/commit-count"
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Get sync threshold from git config (default: 3)
+SYNC_THRESHOLD="$(git config --get stream-workflow.sync-threshold || echo "3")"
+
+# ============================================================================
+# Commit Counter
+# ============================================================================
+
+# Read current count
+if [ -f "$COUNT_FILE" ]; then
+  COUNT=$(cat "$COUNT_FILE")
+else
+  COUNT=0
+fi
+
+# Increment
+COUNT=$((COUNT + 1))
+echo "$COUNT" > "$COUNT_FILE"
+
+echo "[post-commit] Commit #${COUNT} since last dashboard sync"
+
+# ============================================================================
+# Dashboard Sync Trigger
+# ============================================================================
+
+if [ "$COUNT" -ge "$SYNC_THRESHOLD" ]; then
+  echo "[post-commit] Threshold reached (${COUNT}/${SYNC_THRESHOLD}) - syncing dashboard..."
+
+  # Reset counter immediately (before sync to avoid race conditions)
+  echo "0" > "$COUNT_FILE"
+
+  # Trigger dashboard sync in background (non-blocking)
+  # This allows the commit to complete immediately
+  if [ -x "${HOOK_DIR}/sync-dashboard.sh" ]; then
+    "${HOOK_DIR}/sync-dashboard.sh" &
+    SYNC_PID=$!
+    echo "[post-commit] Dashboard sync started (PID: ${SYNC_PID})"
+  else
+    echo "[post-commit] Warning: sync-dashboard.sh not found or not executable"
+    echo "[post-commit] Expected: ${HOOK_DIR}/sync-dashboard.sh"
+  fi
+else
+  REMAINING=$((SYNC_THRESHOLD - COUNT))
+  echo "[post-commit] ${REMAINING} more commit(s) until next dashboard sync"
+fi
+
+# Exit successfully (don't block commit)
+exit 0
