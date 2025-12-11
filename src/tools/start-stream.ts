@@ -29,7 +29,6 @@ import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
 import { getNextStreamId, registerStream } from '../state-manager.js';
-import { addStream } from '../dashboard-manager.js';
 import { renderTemplate } from '../utils/template-renderer.js';
 import type { StartStreamArgs, MCPResponse } from '../types.js';
 import { categorizeFiles, generateUncommittedChangesError } from '../utils/file-categorizer.js';
@@ -271,22 +270,22 @@ async function createMetadataFiles(
 }
 
 // ============================================================================
-// Phase 4: Update Dashboard and State
+// Phase 4: Update State
 // ============================================================================
 
 /**
- * Update central state and dashboard with new stream
+ * Update central state with new stream
  *
  * Updates:
  * - STREAM_STATE.json - Add to stream registry
- * - STREAM_STATUS_DASHBOARD.md - Add to active streams section
  *
- * Both operations are atomic and locked via respective managers.
+ * Stream status tracking is now handled by the separate
+ * @mcp/stream-workflow-status service.
  *
  * @param args User-provided stream parameters
  * @param streamInfo Generated stream ID and number
  */
-async function updateDashboardAndState(
+async function updateState(
   args: StartStreamArgs,
   streamInfo: { streamId: string; streamNumber: string }
 ): Promise<void> {
@@ -294,7 +293,7 @@ async function updateDashboardAndState(
   const timestamp = new Date().toISOString();
   const worktreePath = join(config.WORKTREE_ROOT, streamId);
 
-  // 1. Update STREAM_STATE.json
+  // Update STREAM_STATE.json
   await registerStream({
     streamId,
     streamNumber,
@@ -305,27 +304,6 @@ async function updateDashboardAndState(
     createdAt: timestamp,
     worktreePath,
     branch: streamId,
-  });
-
-  // 2. Update STATUS_DASHBOARD.md
-  // Convert to dashboard format (uses Stream interface)
-  await addStream({
-    id: streamId,
-    number: streamNumber,
-    title: args.title,
-    category: args.category,
-    priority: args.priority,
-    status: 'active', // Dashboard shows as active immediately
-    worktreePath,
-    branch: streamId,
-    createdAt: new Date(timestamp),
-    updatedAt: new Date(timestamp),
-    phases: (args.estimatedPhases || []).map((name) => ({
-      name,
-      status: 'pending',
-    })),
-    currentPhase: null,
-    progress: 0,
   });
 }
 
@@ -374,7 +352,6 @@ async function commitMetadata(
 
   // Stage all metadata files
   await git.add(`.project/plan/streams/${streamId}`);
-  await git.add('.project/STREAM_STATUS_DASHBOARD.md');
   await git.add('.project/.stream-state.json');
 
   // Create commit with standardized message (conventional commits format)
@@ -541,8 +518,8 @@ export async function startStream(args: StartStreamArgs): Promise<MCPResponse> {
     // Phase 3: Create metadata files
     const filesCreated = await createMetadataFiles(args, streamInfo);
 
-    // Phase 4: Update dashboard and state
-    await updateDashboardAndState(args, streamInfo);
+    // Phase 4: Update state
+    await updateState(args, streamInfo);
 
     // Phase 5: Commit metadata to main
     const commitHash = await commitMetadata(args, streamInfo, filesCreated);

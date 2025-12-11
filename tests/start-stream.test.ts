@@ -25,15 +25,13 @@ vi.mock('../src/config.js', () => ({
     PROJECT_ROOT: '',
     WORKTREE_ROOT: '',
     STREAM_STATE_PATH: '.project/.stream-state.json',
-    DASHBOARD_PATH: '.project/STREAM_STATUS_DASHBOARD.md',
-    DASHBOARD_LOCK_DIR: '.project/.dashboard-lock',
+    STATE_LOCK_DIR: '.project/.state.lock',
     LOCK_MAX_RETRIES: 5,
     LOCK_RETRY_INTERVAL: 100,
   },
 }));
 
 vi.mock('../src/state-manager.js');
-vi.mock('../src/dashboard-manager.js');
 vi.mock('../src/utils/template-renderer.js');
 
 import { startStream } from '../src/tools/start-stream.js';

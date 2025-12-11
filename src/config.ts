@@ -226,11 +226,6 @@ export const config: Config = {
   })(),
 
   /**
-   * Path to stream status dashboard (relative to PROJECT_ROOT)
-   */
-  DASHBOARD_PATH: '.project/STREAM_STATUS_DASHBOARD.md',
-
-  /**
    * Path to stream state file (relative to PROJECT_ROOT)
    */
   STREAM_STATE_PATH: '.project/.stream-state.json',
@@ -246,9 +241,10 @@ export const config: Config = {
   MERGE_LOCK_DIR: '.git/MERGE_LOCK',
 
   /**
-   * Directory for dashboard lock (relative to PROJECT_ROOT)
+   * Directory for state lock (relative to PROJECT_ROOT)
+   * Protects .stream-state.json updates
    */
-  DASHBOARD_LOCK_DIR: '.project/.dashboard.lock',
+  STATE_LOCK_DIR: '.project/.state.lock',
 
   /**
    * Time to wait between lock acquisition retries (milliseconds)

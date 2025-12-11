@@ -696,7 +696,7 @@ function getStatePath(): string {
  * Get absolute path to state lock directory
  */
 function getLockPath(): string {
-  return join(config.PROJECT_ROOT, config.DASHBOARD_LOCK_DIR);
+  return join(config.PROJECT_ROOT, config.STATE_LOCK_DIR);
 }
 
 /**

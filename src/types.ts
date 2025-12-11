@@ -484,12 +484,11 @@ export interface Config {
   // Paths
   PROJECT_ROOT: string;
   WORKTREE_ROOT: string;
-  DASHBOARD_PATH: string;
   STREAM_STATE_PATH: string;
 
   // Locking
   MERGE_LOCK_DIR: string;
-  DASHBOARD_LOCK_DIR: string;
+  STATE_LOCK_DIR: string;
   LOCK_RETRY_INTERVAL: number;
   LOCK_MAX_RETRIES: number;
 
