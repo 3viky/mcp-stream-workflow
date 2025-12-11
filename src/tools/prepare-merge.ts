@@ -118,7 +118,7 @@ Resolve these files and run prepare_merge again.`,
     // Step D: Commit if needed
     if (!postMergeStatus.isClean()) {
       await git.add('.');
-      await git.commit(`Merge main into ${streamId}`);
+      await git.commit(`chore(${streamId}): merge main into stream`);
       console.error(`[prepare_merge] Merge committed`);
     }
 

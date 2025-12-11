@@ -336,9 +336,9 @@ async function updateDashboardAndState(
 /**
  * Commit stream metadata to main branch
  *
- * Commit message format:
+ * Commit message format (conventional commits):
  * ```
- * 🚀 Initialize {streamId}: {title}
+ * chore({streamId}): initialize stream - {title}
  *
  * Stream initialization by MCP Stream Workflow Manager
  *
@@ -377,12 +377,12 @@ async function commitMetadata(
   await git.add('.project/STREAM_STATUS_DASHBOARD.md');
   await git.add('.project/.stream-state.json');
 
-  // Create commit with standardized message
+  // Create commit with standardized message (conventional commits format)
   const fileList = filesCreated
     .map((f) => '- ' + f.replace(config.PROJECT_ROOT, '.'))
     .join('\n');
 
-  const commitMessage = `🚀 Initialize ${streamId}: ${args.title}
+  const commitMessage = `chore(${streamId}): initialize stream - ${args.title}
 
 Stream initialization by MCP Stream Workflow Manager
 

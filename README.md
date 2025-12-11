@@ -2,8 +2,10 @@
 
 AI-powered worktree workflow automation for egirl-platform.
 
-**Version**: 0.1.0
-**Status**: Documentation Phase
+**Version**: 0.2.0
+**Status**: Production Ready
+
+> **🤖 Automated Releases:** This package uses conventional commits for automatic versioning. Push commits with `feat:` or `fix:` prefixes to trigger releases. See [COMMIT_CONVENTION.md](.github/COMMIT_CONVENTION.md)
 
 ---
 
