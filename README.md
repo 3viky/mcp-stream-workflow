@@ -1,0 +1,321 @@
+# Stream Workflow Manager MCP Server
+
+AI-powered worktree workflow automation for egirl-platform.
+
+**Version**: 0.1.0
+**Status**: Documentation Phase
+
+---
+
+## Overview
+
+Stream Workflow Manager is a Model Context Protocol (MCP) server that automates git worktree workflows for Claude Code agents. It enforces safe development practices, provides AI-powered conflict resolution, and manages parallel development streams.
+
+### Key Features
+
+- **Worktree Enforcement**: Automatically blocks file modifications in main directory, guides agents to create isolated worktrees
+- **Stream Lifecycle Management**: Creates, tracks, and archives development streams with progress monitoring
+- **AI-Powered Merge Resolution**: Uses Claude to intelligently resolve merge conflicts with context-aware strategies
+- **Concurrency Control**: Prevents merge conflicts through atomic operations and locking
+- **Validation Pipeline**: Runs TypeScript, build, and lint checks after conflict resolution
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- Claude Code CLI
+- Git worktrees enabled
+- Anthropic API key
+
+### Setup
+
+1. **Install dependencies:**
+
+```bash
+cd .claude/mcp-servers/stream-workflow-manager
+pnpm install
+```
+
+2. **Configure MCP server:**
+
+Add to `.claude/mcp-servers.json`:
+
+```json
+{
+  "stream-workflow-manager": {
+    "command": "node",
+    "args": [".claude/mcp-servers/stream-workflow-manager/dist/server.js"],
+    "env": {
+      "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+      "PROJECT_ROOT": "/path/to/your/project",
+      "WORKTREE_ROOT": "/path/to/worktrees"
+    }
+  }
+}
+```
+
+3. **Build the server:**
+
+```bash
+pnpm build
+```
+
+4. **Restart Claude Code:**
+
+Exit and restart Claude Code to load the MCP server.
+
+---
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `verify_location` | Checks if current directory is a worktree, blocks operations in main |
+| `create_stream` | Creates new worktree + branch + stream tracking file |
+| `update_stream_status` | Updates stream progress in STREAM_STATUS_DASHBOARD.md |
+| `get_stream_info` | Retrieves stream metadata and current status |
+| `list_streams` | Lists all active/completed streams by category |
+| `complete_phase` | Marks stream phase as complete, updates progress |
+| `prepare_merge` | Merges main into worktree with AI conflict resolution |
+| `complete_merge` | Fast-forwards main branch (with locking) |
+| `complete_stream` | Archives stream to history, cleanup worktree |
+| `validate_stream` | Checks stream health, detects configuration issues |
+| `sync_dashboard` | Reconciles dashboard with actual worktree state |
+
+---
+
+## Usage Examples
+
+### Creating a New Stream
+
+```typescript
+// Claude Code agent workflow
+const result = await mcp__stream-workflow__create_stream({
+  category: "feature",
+  description: "Implement user authentication"
+});
+
+// Result: Creates worktree, branch, and stream tracking file
+// Location: ../egirl-platform-worktrees/stream-001
+```
+
+### Merging Changes
+
+```typescript
+// Phase 1: Merge main into worktree (AI resolves conflicts)
+const prepareResult = await mcp__stream-workflow__prepare_merge({
+  streamId: "stream-001"
+});
+
+// Phase 2: Fast-forward main (clean merge, no conflicts)
+const completeResult = await mcp__stream-workflow__complete_merge({
+  streamId: "stream-001"
+});
+```
+
+### Completing a Stream
+
+```typescript
+// Archive stream and cleanup
+const result = await mcp__stream-workflow__complete_stream({
+  streamId: "stream-001",
+  outcome: "merged",
+  summary: "Authentication implemented and tested"
+});
+```
+
+---
+
+## Architecture
+
+```
+stream-workflow-manager/
+├── src/
+│   ├── server.ts              # MCP server entry point
+│   ├── config.ts              # Configuration
+│   ├── types.ts               # TypeScript interfaces
+│   ├── conflict-resolver.ts   # AI conflict resolution engine
+│   │
+│   ├── tools/                 # MCP tool implementations
+│   │   ├── prepare-merge.ts
+│   │   ├── complete-merge.ts
+│   │   └── ...
+│   │
+│   ├── strategies/            # Conflict resolution strategies
+│   │   ├── code-merge.ts      # TypeScript/JavaScript
+│   │   ├── config-merge.ts    # JSON/YAML
+│   │   └── docs-merge.ts      # Markdown
+│   │
+│   └── validators/            # Post-merge validation
+│       ├── typescript.ts
+│       ├── build.ts
+│       └── lint.ts
+│
+├── prompts/
+│   └── conflict-resolution.txt    # AI prompts
+│
+└── docs/
+    ├── ARCHITECTURE.md        # System design
+    ├── EXTENDING.md           # Extension guide
+    └── ERROR_CATALOG.md       # Error reference
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | API key for Claude AI conflict resolution |
+| `PROJECT_ROOT` | Yes | Path to main project directory |
+| `WORKTREE_ROOT` | Yes | Path to worktrees parent directory |
+| `DEVELOPER_MODE` | No | Enable self-modification features (default: false) |
+
+### Configuration File
+
+Edit `src/config.ts` to customize:
+
+- File size limits for conflict resolution
+- Timeout settings for AI operations
+- AI model and token limits
+- Path configurations
+
+---
+
+## Troubleshooting
+
+### Server Not Starting
+
+**Symptoms**: MCP tools not available in Claude Code
+
+**Solutions**:
+1. Check `.claude/mcp-servers.json` configuration
+2. Verify `ANTHROPIC_API_KEY` is set
+3. Check server logs: `~/.claude/logs/mcp-stream-workflow.log`
+4. Rebuild server: `pnpm build`
+5. Restart Claude Code
+
+### Tools Not Found After Update
+
+**Symptoms**: "Tool not found" errors after modifying server
+
+**Cause**: MCP server caches old code
+
+**Solution**:
+```bash
+# Find and kill the server process
+ps aux | grep stream-workflow-manager
+kill <PID>
+
+# Restart Claude Code (will auto-restart server)
+```
+
+### Conflict Resolution Failures
+
+**Symptoms**: AI conflict resolution fails or produces invalid code
+
+**Solutions**:
+1. Check file size (default limit: 100KB)
+2. Review `prompts/conflict-resolution.txt` for your file type
+3. Increase timeout in `src/config.ts`
+4. Check API key has sufficient quota
+5. Review error in logs for specific failure reason
+
+### Merge Lock Timeout
+
+**Symptoms**: "Merge lock timeout" error
+
+**Cause**: Previous merge operation didn't release lock
+
+**Solution**:
+```bash
+# Check for stale lock files
+ls -la /path/to/project/.git/
+
+# Remove stale lock (if safe)
+rm /path/to/project/.git/merge.lock
+
+# Retry operation
+```
+
+---
+
+## How It Works
+
+### Worktree Workflow
+
+1. **Isolation**: Each development stream gets its own worktree
+2. **Safety**: Main branch is protected, all edits happen in worktrees
+3. **Merging**: Two-phase merge ensures conflicts are resolved in isolation
+4. **Validation**: TypeScript, build, and lint checks run after merging
+5. **Cleanup**: Completed streams are archived to `.project/history/`
+
+### AI Conflict Resolution
+
+When conflicts occur during `prepare_merge`:
+
+1. **Detection**: Identifies conflicting files and conflict markers
+2. **Context Gathering**: Extracts commits from both branches
+3. **Strategy Selection**: Chooses appropriate resolution strategy (code/config/docs)
+4. **AI Resolution**: Sends context to Claude for intelligent merging
+5. **Validation**: Runs TypeScript/build/lint to verify result
+6. **Commit**: Creates merge commit with resolved conflicts
+
+### Stream States
+
+- **active**: Work in progress
+- **ready-for-merge**: Ready to merge to main
+- **merged**: Successfully merged to main
+- **abandoned**: Discarded without merging
+- **archived**: Completed and moved to history
+
+---
+
+## Contributing
+
+Contributions are welcome! See [DEVELOPMENT.md](./DEVELOPMENT.md) for:
+
+- Development setup with `DEVELOPER_MODE=true`
+- Code modification workflow
+- Extension points and customization
+- Testing guidelines
+- Release process
+
+---
+
+## Support
+
+**For users:**
+- Check [ERROR_CATALOG.md](./docs/ERROR_CATALOG.md) for error solutions
+- Review [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for system design
+- See [EXTENDING.md](./docs/EXTENDING.md) for customization
+
+**For developers:**
+- See [DEVELOPMENT.md](./DEVELOPMENT.md) for contribution guide
+- Review test files in `tests/` for usage examples
+
+---
+
+## License
+
+MIT
+
+---
+
+## Version History
+
+**v0.1.0** (2025-12-10)
+- Initial release
+- Core workflow tools
+- AI conflict resolution
+- Documentation suite
+
+---
+
+**Last Updated**: 2025-12-11
+**Maintained by**: [Your Name/Organization]
