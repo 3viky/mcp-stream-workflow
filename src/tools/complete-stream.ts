@@ -80,7 +80,7 @@ export async function completeStream(args: CompleteStreamArgs): Promise<MCPRespo
       try {
         await git.raw(['worktree', 'remove', worktreePath, '--force']);
         response.worktreeDeleted = true;
-      } catch (worktreeError) {
+      } catch {
         console.error(`[complete_stream] Worktree remove failed, trying manual cleanup...`);
         try {
           rmSync(worktreePath, { recursive: true, force: true });

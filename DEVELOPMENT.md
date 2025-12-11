@@ -135,8 +135,11 @@ kill <PID>
 
 Test the tool in Claude Code:
 ```bash
-# Example: Test prepare_merge
-mcp__stream-workflow__prepare_merge({ streamId: "stream-test" })
+# Example: Test start_stream
+mcp__stream-workflow__start_stream({
+  category: "test",
+  description: "Test stream initialization"
+})
 ```
 
 Verify it works as expected.
@@ -271,6 +274,25 @@ export const config = {
 
 ---
 
+## Implementation Status
+
+**Current implementation** (as of v0.1.0):
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `start_stream` | ✅ Implemented | Creates metadata in main, then worktree |
+| `verify_location` | ✅ Implemented | Enforces worktree-only rule |
+| `prepare_merge` | ✅ Implemented | Merges main into worktree |
+| `complete_merge` | ✅ Implemented | Fast-forward merge to main |
+| `complete_stream` | ✅ Implemented | Archive and cleanup |
+| Conflict resolution | ✅ Implemented | Extraction and formatting for agent |
+| Validation pipeline | ✅ Implemented | TypeScript, build, lint |
+| State management | ✅ Implemented | Stream state and dashboard |
+| Templates | ✅ Implemented | HANDOFF, README, STATUS templates |
+| Tests | ⚠️ Partial | Core tools tested, needs expansion |
+
+---
+
 ## Known Limitations
 
 **Current limitations** (as of v0.1.0):
@@ -315,7 +337,7 @@ tail -f ~/.claude/logs/mcp-stream-workflow.log
 **From MCP server directory:**
 ```bash
 # Run specific test
-pnpm test:tool prepare_merge
+pnpm test:tool start_stream
 
 # Or run all tests
 pnpm test
@@ -430,6 +452,7 @@ stream-workflow-manager/
 │   ├── conflict-resolver.ts   # AI-powered conflict resolution
 │   │
 │   ├── tools/                 # MCP tool implementations
+│   │   ├── start-stream.ts        # Initialize stream lifecycle
 │   │   ├── prepare-merge.ts       # Merge main into worktree + AI resolution
 │   │   ├── complete-merge.ts      # Fast-forward main (with locking)
 │   │   ├── create-stream.ts       # Create worktree + stream file
@@ -451,6 +474,7 @@ stream-workflow-manager/
 │   └── conflict-resolution.txt    # Claude AI prompt template
 │
 ├── tests/
+│   ├── start-stream.test.ts
 │   ├── prepare-merge.test.ts
 │   ├── conflict-resolver.test.ts
 │   └── ...
@@ -491,7 +515,7 @@ stream-workflow-manager/
 pnpm test
 
 # Run specific test suite
-pnpm test conflict-resolver
+pnpm test start-stream
 
 # Watch mode
 pnpm test:watch
@@ -507,7 +531,7 @@ pnpm test:coverage
 pnpm test:integration
 
 # Test specific scenarios
-pnpm test:integration -- --grep "merge conflict resolution"
+pnpm test:integration -- --grep "stream lifecycle"
 ```
 
 ### Manual Testing Checklist
@@ -614,6 +638,7 @@ git push origin v0.2.0
 - Architecture design
 - Extension point specifications
 - Development mode implementation
+- start_stream tool implemented
 
 ---
 

@@ -163,12 +163,54 @@ fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  OPTIONAL FEATURES"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Screenshot Generation (OPTIONAL):"
+echo "  Automatically generates screenshots during prepare_merge"
+echo "  Prevents pre-push hooks from creating uncommitted files in main"
+echo ""
+echo "  Enable ONLY if your project has:"
+echo "    - A 'pnpm screenshots:quick' command"
+echo "    - A pre-push hook that generates screenshots"
+echo ""
+
+ENABLE_SCREENSHOTS=false
+read -p "Enable screenshot generation? [y/N]: " ENABLE_SCREENSHOTS_INPUT
+
+if [[ "$ENABLE_SCREENSHOTS_INPUT" =~ ^[Yy] ]]; then
+  ENABLE_SCREENSHOTS=true
+  SCREENSHOT_ENV_CONFIG="      \"ENABLE_SCREENSHOTS\": \"true\","
+  echo ""
+  echo "✅ Screenshot generation will be ENABLED"
+else
+  SCREENSHOT_ENV_CONFIG=""
+  echo ""
+  echo "Screenshot generation will be DISABLED (default)"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  CLAUDE CODE CONFIGURATION"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Add this to your ~/.claude.json under \"mcpServers\":"
 echo ""
 
+if [[ -n "$SCREENSHOT_ENV_CONFIG" ]]; then
+cat << EOF
+  "stream-workflow": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["${SCRIPT_DIR}/dist/server.js"],
+    "env": {
+$SCREENSHOT_ENV_CONFIG
+      "PROJECT_ROOT": "${PROJECT_ROOT_DISPLAY}",
+      "WORKTREE_ROOT": "${WORKTREE_ROOT_DISPLAY}"
+    }
+  }
+EOF
+else
 cat << EOF
   "stream-workflow": {
     "type": "stdio",
@@ -180,6 +222,7 @@ cat << EOF
     }
   }
 EOF
+fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -191,10 +234,21 @@ echo "  - Claude Code runs from anywhere in your project (any subdirectory)"
 echo "  - MCP server knows PROJECT_ROOT is: ${PROJECT_ROOT_DISPLAY}"
 echo "  - Worktrees are created at: ${WORKTREE_ROOT_DISPLAY}/<stream-name>/"
 echo "  - Git hooks enforce worktree-only commits"
+if [[ "$ENABLE_SCREENSHOTS" == "true" ]]; then
+echo "  - Screenshot generation: ENABLED (via env var)"
+else
+echo "  - Screenshot generation: DISABLED (default)"
+fi
 echo ""
 echo "Available hooks (in .git-hooks/):"
 echo "  verify-worktree-location  - Check if you're in a worktree"
 echo "  merge-worktree-to-main    - Safe merge with locking"
+echo ""
+echo "Configuration options:"
+echo "  - Per-project: Add ENABLE_SCREENSHOTS to env in ~/.claude.json (shown above)"
+echo "  - Global: Add to ~/.claude/mcp-config.json:"
+echo "    {\"streamWorkflow\": {\"enableScreenshots\": true}}"
+echo "  - See docs/OPTIONAL_FEATURES.md for more details"
 echo ""
 echo "Next steps:"
 echo "  1. Add the config above to ~/.claude.json"

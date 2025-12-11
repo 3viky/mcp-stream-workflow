@@ -5,6 +5,7 @@
  * Implements the complete merge protocol as MCP tools.
  *
  * Tools implemented:
+ * - start_stream: Initialize new development stream [Step A]
  * - verify_location: Enforce worktree-only development
  * - prepare_merge: Merge main into worktree + AI conflict resolution [Steps B,C,D,E,F]
  * - complete_merge: Fast-forward main from worktree [Steps G,H,I]
@@ -19,10 +20,11 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { config, validateConfig, getDeveloperModeSource } from './config.js';
+import { config, validateConfig, getDeveloperModeSource, getScreenshotConfigSource } from './config.js';
 import type { MCPResponse, ResponseMetadata, NoteToAgent } from './types.js';
 
 // Tool implementations
+import { startStream } from './tools/start-stream.js';
 import { verifyLocation } from './tools/verify-location.js';
 import { prepareMerge } from './tools/prepare-merge.js';
 import { completeMerge } from './tools/complete-merge.js';
@@ -102,6 +104,52 @@ function createNoteToAgent(_toolName: string): NoteToAgent | null {
 }
 
 const TOOLS: Tool[] = [
+  {
+    name: 'start_stream',
+    description:
+      'Initialize a new development stream. ' +
+      'RUNS IN MAIN (only legitimate exception to worktree-only rule). ' +
+      'Creates metadata, commits to main, creates worktree. ' +
+      'Call this BEFORE beginning work on a new feature/fix.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Human-readable stream title (e.g., "Add user authentication")',
+        },
+        category: {
+          type: 'string',
+          enum: ['backend', 'frontend', 'infrastructure', 'testing', 'documentation', 'refactoring'],
+          description: 'Stream category for organization',
+        },
+        priority: {
+          type: 'string',
+          enum: ['critical', 'high', 'medium', 'low'],
+          description: 'Stream priority level',
+        },
+        handoff: {
+          type: 'string',
+          description: 'HANDOFF.md content - detailed instructions for what the agent should work on',
+        },
+        description: {
+          type: 'string',
+          description: 'Additional context for README.md (optional)',
+        },
+        estimatedPhases: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional phase names for tracking progress (e.g., ["Planning", "Implementation", "Testing"])',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional tags for categorization (e.g., ["authentication", "security"])',
+        },
+      },
+      required: ['title', 'category', 'priority', 'handoff'],
+    },
+  },
   {
     name: 'verify_location',
     description:
@@ -238,6 +286,10 @@ async function main(): Promise<void> {
       let result: MCPResponse;
 
       switch (name) {
+        case 'start_stream':
+          result = await startStream(args as any);
+          break;
+
         case 'verify_location':
           result = await verifyLocation(args as { workingDir?: string });
           break;
@@ -320,6 +372,15 @@ async function main(): Promise<void> {
   if (config.DEVELOPER_MODE) {
     console.error(
       '  → Agents will receive self-improvement instructions. See DEVELOPMENT.md'
+    );
+  }
+  console.error(
+    `Screenshot generation: ${config.FEATURES.generateScreenshots ? 'ENABLED' : 'DISABLED (opt-in feature)'}`
+  );
+  console.error(`  → Source: ${getScreenshotConfigSource()}`);
+  if (config.FEATURES.generateScreenshots) {
+    console.error(
+      '  → Screenshots will be generated in prepare_merge. See docs/OPTIONAL_FEATURES.md'
     );
   }
 }

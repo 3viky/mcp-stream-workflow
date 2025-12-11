@@ -37,6 +37,22 @@
   "developerMode": true,
 
   // ----------------------------------------------------------------------------
+  // Stream Workflow Settings
+  // ----------------------------------------------------------------------------
+  //
+  // Optional configuration for stream-workflow MCP server features.
+  //
+  // enableScreenshots: Enable automatic screenshot generation during prepare_merge
+  //   - Default: false (opt-in feature)
+  //   - When enabled: Screenshots generated in worktree before merge to main
+  //   - Requires: `pnpm screenshots:quick` command in your project
+  //   - Purpose: Prevents pre-push hooks from creating uncommitted files in main
+  //
+  "streamWorkflow": {
+    "enableScreenshots": false
+  },
+
+  // ----------------------------------------------------------------------------
   // Future Settings (reserved for expansion)
   // ----------------------------------------------------------------------------
   //

@@ -62,6 +62,7 @@ async function runTypeScript(workingDir: string): Promise<SingleValidationResult
     console.error('[validators] TypeScript: PASSED');
     return { passed: true, errors: [] };
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const output = error instanceof Error ? (error as any).stdout || error.message : String(error);
     console.error('[validators] TypeScript: FAILED');
     return {
@@ -82,6 +83,7 @@ async function runBuild(workingDir: string): Promise<SingleValidationResult> {
     console.error('[validators] Build: PASSED');
     return { passed: true, errors: [] };
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const output = error instanceof Error ? (error as any).stdout || error.message : String(error);
     console.error('[validators] Build: FAILED');
     return {
@@ -101,6 +103,7 @@ async function runLint(workingDir: string): Promise<SingleValidationResult> {
     console.error('[validators] Lint: PASSED');
     return { passed: true, errors: [] };
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const output = error instanceof Error ? (error as any).stdout || error.message : String(error);
     console.error('[validators] Lint: FAILED');
     return {

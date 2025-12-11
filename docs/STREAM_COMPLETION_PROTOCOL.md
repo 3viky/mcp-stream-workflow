@@ -185,8 +185,51 @@ pnpm test
 ```
 
 **Decision**:
-- **If all pass** → Proceed to [F]
+- **If all pass** → Proceed to [E-2]
 - **If failures** → Fix issues, commit fixes, repeat [E]
+
+---
+
+### [E-2] Generate Screenshots (if applicable)
+
+**Location**: Worktree
+
+**Purpose**: Generate screenshots before merging to main
+
+**Why this step exists**:
+- Pre-push hook generates screenshots when pushing to main
+- If screenshots are generated in worktree FIRST:
+  - They're included in the merge commit
+  - Pre-push hook detects them and skips generation
+  - Main branch stays clean (no uncommitted files)
+
+**Commands**:
+```bash
+# Screenshot generation (handles dev server automatically)
+pnpm screenshots:quick
+```
+
+**Behavior**:
+- Screenshot command automatically:
+  - Starts dev server if not running
+  - Generates screenshots
+  - Shuts down server if it started it
+- If screenshots generated:
+  ```bash
+  git add product/screenshots/
+  git commit -m "chore: Update screenshots for merge"
+  ```
+- If generation fails: Log warning, continue merge (non-fatal)
+
+**Configuration**:
+- Enabled by default (`config.FEATURES.generateScreenshots = true`)
+- Can be disabled per-project or per-merge
+- Timeout: 5 minutes (allows server startup time)
+
+**Decision**:
+- **If screenshots generated** → Committed automatically, proceed to [F]
+- **If failed** → Warning logged, proceed to [F] (non-fatal)
+- **If disabled** → Skip to [F]
 
 ---
 

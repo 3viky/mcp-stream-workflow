@@ -71,28 +71,63 @@ Exit and restart Claude Code to load the MCP server.
 
 ## Available Tools
 
-| Tool | Description |
-|------|-------------|
-| `verify_location` | Checks if current directory is a worktree, blocks operations in main |
-| `create_stream` | Creates new worktree + branch + stream tracking file |
-| `update_stream_status` | Updates stream progress in STREAM_STATUS_DASHBOARD.md |
-| `get_stream_info` | Retrieves stream metadata and current status |
-| `list_streams` | Lists all active/completed streams by category |
-| `complete_phase` | Marks stream phase as complete, updates progress |
-| `prepare_merge` | Merges main into worktree with AI conflict resolution |
-| `complete_merge` | Fast-forwards main branch (with locking) |
-| `complete_stream` | Archives stream to history, cleanup worktree |
-| `validate_stream` | Checks stream health, detects configuration issues |
-| `sync_dashboard` | Reconciles dashboard with actual worktree state |
+| Tool | Description | Status |
+|------|-------------|--------|
+| `start_stream` | Initialize new stream with metadata in main, create worktree | ✅ Implemented |
+| `verify_location` | Checks if current directory is a worktree, blocks operations in main | ✅ Implemented |
+| `create_stream` | Creates new worktree + branch + stream tracking file | ✅ Implemented |
+| `update_stream_status` | Updates stream progress in STREAM_STATUS_DASHBOARD.md | ✅ Implemented |
+| `get_stream_info` | Retrieves stream metadata and current status | ✅ Implemented |
+| `list_streams` | Lists all active/completed streams by category | ✅ Implemented |
+| `complete_phase` | Marks stream phase as complete, updates progress | ✅ Implemented |
+| `prepare_merge` | Merges main into worktree with AI conflict resolution | ✅ Implemented |
+| `complete_merge` | Fast-forwards main branch (with locking) | ✅ Implemented |
+| `complete_stream` | Archives stream to history, cleanup worktree | ✅ Implemented |
+| `validate_stream` | Checks stream health, detects configuration issues | ✅ Implemented |
+| `sync_dashboard` | Reconciles dashboard with actual worktree state | ✅ Implemented |
 
 ---
 
 ## Usage Examples
 
-### Creating a New Stream
+### Full Stream Lifecycle
 
 ```typescript
-// Claude Code agent workflow
+// Step 1: Initialize new stream (from main directory)
+const initResult = await mcp__stream-workflow__start_stream({
+  category: "feature",
+  description: "Implement user authentication",
+  scope: "Add JWT authentication middleware and login endpoint"
+});
+
+// Result: Creates metadata in main, creates worktree at stream-001
+// Location: ../egirl-platform-worktrees/stream-001
+
+// Step 2: Work in the worktree...
+// (make changes, commit to branch)
+
+// Step 3: Merge main into worktree (AI resolves conflicts)
+const prepareResult = await mcp__stream-workflow__prepare_merge({
+  streamId: "stream-001"
+});
+
+// Step 4: Fast-forward main (clean merge, no conflicts)
+const completeResult = await mcp__stream-workflow__complete_merge({
+  streamId: "stream-001"
+});
+
+// Step 5: Archive stream and cleanup
+const archiveResult = await mcp__stream-workflow__complete_stream({
+  streamId: "stream-001",
+  outcome: "merged",
+  summary: "Authentication implemented and tested"
+});
+```
+
+### Creating a New Stream (Alternative Method)
+
+```typescript
+// Legacy method (if start_stream unavailable)
 const result = await mcp__stream-workflow__create_stream({
   category: "feature",
   description: "Implement user authentication"
@@ -140,6 +175,7 @@ stream-workflow-manager/
 │   ├── conflict-resolver.ts   # AI conflict resolution engine
 │   │
 │   ├── tools/                 # MCP tool implementations
+│   │   ├── start-stream.ts    # Initialize stream lifecycle
 │   │   ├── prepare-merge.ts
 │   │   ├── complete-merge.ts
 │   │   └── ...
@@ -216,6 +252,28 @@ stream-workflow-manager/
 
 See [DEVELOPMENT.md](./DEVELOPMENT.md) for complete developer guide.
 
+### Optional Features
+
+The MCP server supports optional features that can be enabled globally or per-project:
+
+**Screenshot Generation** (opt-in):
+- Automatically generates screenshots during `prepare_merge`
+- Prevents pre-push hooks from creating uncommitted files in main
+- Requires: `pnpm screenshots:quick` command in your project
+
+Enable globally in `~/.claude/mcp-config.json`:
+```json
+{
+  "streamWorkflow": {
+    "enableScreenshots": true
+  }
+}
+```
+
+Or per-project via environment variable (see setup script).
+
+See [docs/OPTIONAL_FEATURES.md](./docs/OPTIONAL_FEATURES.md) for complete details.
+
 ### Advanced Configuration
 
 Edit `src/config.ts` to customize:
@@ -289,11 +347,12 @@ rm /path/to/project/.git/merge.lock
 
 ### Worktree Workflow
 
-1. **Isolation**: Each development stream gets its own worktree
-2. **Safety**: Main branch is protected, all edits happen in worktrees
-3. **Merging**: Two-phase merge ensures conflicts are resolved in isolation
-4. **Validation**: TypeScript, build, and lint checks run after merging
-5. **Cleanup**: Completed streams are archived to `.project/history/`
+1. **Initialization**: start_stream creates metadata in main, then creates worktree
+2. **Isolation**: Each development stream gets its own worktree
+3. **Safety**: Main branch is protected, all edits happen in worktrees
+4. **Merging**: Two-phase merge ensures conflicts are resolved in isolation
+5. **Validation**: TypeScript, build, and lint checks run after merging
+6. **Cleanup**: Completed streams are archived to `.project/history/`
 
 ### AI Conflict Resolution
 
@@ -351,7 +410,7 @@ MIT
 
 **v0.1.0** (2025-12-10)
 - Initial release
-- Core workflow tools
+- Core workflow tools including start_stream
 - AI conflict resolution
 - Documentation suite
 

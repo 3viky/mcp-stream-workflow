@@ -13,7 +13,10 @@
  * which resolves them directly (because the agent IS Claude).
  */
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
@@ -21,10 +24,13 @@ import type { MCPResponse } from '../types.js';
 import { extractConflicts, formatConflictsForAgent } from '../conflict-resolver.js';
 import { runValidation } from '../validators/index.js';
 
+const execAsync = promisify(exec);
+
 interface PrepareMergeArgs {
   streamId: string;
   validateBeforePush?: boolean;
   skipPush?: boolean;
+  generateScreenshots?: boolean;
 }
 
 export async function prepareMerge(args: PrepareMergeArgs): Promise<MCPResponse> {
@@ -141,6 +147,38 @@ Resolve these files and run prepare_merge again.`,
       }
     }
 
+    // Step E-2: Generate screenshots (if enabled)
+    const shouldGenerateScreenshots = args.generateScreenshots ?? config.FEATURES.generateScreenshots;
+    let screenshotsGenerated = false;
+
+    if (shouldGenerateScreenshots) {
+      console.error(`[prepare_merge] Generating screenshots...`);
+      console.error(`[prepare_merge] (Screenshot command handles dev server automatically)`);
+
+      try {
+        await execAsync('pnpm screenshots:quick', {
+          cwd: worktreePath,
+          timeout: config.SCREENSHOT_TIMEOUT,
+        });
+
+        // Check if screenshots were generated
+        const screenshotsExist = existsSync(join(worktreePath, 'product/screenshots'));
+        if (screenshotsExist) {
+          await git.add('product/screenshots/');
+          await git.commit('chore: Update screenshots for merge');
+          screenshotsGenerated = true;
+          console.error(`[prepare_merge] ✅ Screenshots generated and committed`);
+        } else {
+          console.error(`[prepare_merge] ⚠️ No screenshots generated (may not be applicable)`);
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[prepare_merge] ⚠️ Screenshot generation failed (non-fatal): ${errorMsg}`);
+        console.error(`[prepare_merge] Continuing with merge...`);
+        // Continue - screenshots are not critical for merge
+      }
+    }
+
     // Step F: Push to origin
     if (!skipPush) {
       console.error(`[prepare_merge] Pushing to origin/${streamId}...`);
@@ -161,6 +199,10 @@ VALIDATION:
   TypeScript: ${validationResult.typescript ? 'PASSED' : 'FAILED'}
   Build: ${validationResult.build ? 'PASSED' : 'FAILED'}
   Lint: ${validationResult.lint ? 'PASSED' : 'FAILED'}
+
+SCREENSHOTS:
+  Generated: ${screenshotsGenerated ? 'Yes ✅' : shouldGenerateScreenshots ? 'No (not applicable)' : 'Skipped (disabled)'}
+  ${screenshotsGenerated ? 'Pre-push hook will detect screenshots and skip generation' : ''}
 
 Pushed to origin: ${skipPush ? 'No (skipped)' : 'Yes'}
 

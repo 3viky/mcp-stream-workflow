@@ -250,6 +250,20 @@ export interface RollbackMergeArgs {
   reason: string;
 }
 
+/**
+ * Arguments for starting a new stream
+ * Creates a new worktree, branch, and initializes stream state
+ */
+export interface StartStreamArgs {
+  title: string;
+  category: StreamCategory;
+  priority: StreamPriority;
+  handoff: string;
+  description?: string;
+  estimatedPhases?: string[];
+  tags?: string[];
+}
+
 // ============================================================================
 // Tool Response Types
 // ============================================================================
@@ -360,6 +374,25 @@ export interface SyncDashboardResponse {
   missingStreamFiles: string[];
 }
 
+/**
+ * Response from starting a new stream
+ * Includes stream metadata, worktree information, and next steps
+ */
+export interface StartStreamResponse {
+  success: boolean;
+  streamId: string;
+  streamNumber: number;
+  worktreePath: string;
+  branchName: string;
+  metadata: {
+    planDir: string;
+    filesCreated: string[];
+    commitHash: string;
+  };
+  nextSteps: string[];
+  handoffPath: string;
+}
+
 // ============================================================================
 // Error Types
 // ============================================================================
@@ -440,6 +473,7 @@ export interface Config {
   CONFLICT_RESOLUTION_TIMEOUT: number;
   MERGE_LOCK_TIMEOUT: number;
   VALIDATION_TIMEOUT: number;
+  SCREENSHOT_TIMEOUT: number;
 
   // AI Configuration
   ANTHROPIC_MODEL: string;

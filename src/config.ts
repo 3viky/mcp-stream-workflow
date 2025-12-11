@@ -18,6 +18,9 @@ import type { Config } from './types.js';
  */
 interface GlobalMCPConfig {
   developerMode?: boolean;
+  streamWorkflow?: {
+    enableScreenshots?: boolean;
+  };
   [key: string]: any;
 }
 
@@ -76,8 +79,43 @@ function resolveDeveloperMode(): { enabled: boolean; source: string } {
   };
 }
 
-// Resolve DEVELOPER_MODE and store for later reference
+/**
+ * Determine screenshot generation feature from multiple sources
+ * Priority order:
+ *   1. Environment variable (ENABLE_SCREENSHOTS from .claude/mcp-servers.json)
+ *   2. Global config file (~/.claude/mcp-config.json streamWorkflow.enableScreenshots)
+ *   3. Default: false (opt-in feature)
+ *
+ * @returns Object with enabled status and source
+ */
+function resolveScreenshotGeneration(): { enabled: boolean; source: string } {
+  // 1. Check environment variable (highest priority)
+  if (process.env.ENABLE_SCREENSHOTS !== undefined) {
+    return {
+      enabled: process.env.ENABLE_SCREENSHOTS === 'true',
+      source: 'environment variable (.claude/mcp-servers.json)',
+    };
+  }
+
+  // 2. Check global config file
+  const globalConfig = readGlobalConfig();
+  if (globalConfig?.streamWorkflow?.enableScreenshots !== undefined) {
+    return {
+      enabled: globalConfig.streamWorkflow.enableScreenshots === true,
+      source: 'global config (~/.claude/mcp-config.json)',
+    };
+  }
+
+  // 3. Default to false (opt-in feature)
+  return {
+    enabled: false,
+    source: 'default (disabled - opt-in feature)',
+  };
+}
+
+// Resolve DEVELOPER_MODE and screenshot generation, store for later reference
 const developerModeConfig = resolveDeveloperMode();
+const screenshotConfig = resolveScreenshotGeneration();
 
 export const config: Config = {
   // ============================================================================
@@ -239,7 +277,51 @@ export const config: Config = {
      * Future: Learn which strategies work best
      */
     conflictAnalytics: false,
+
+    /**
+     * Generate screenshots during prepare_merge (IMPLEMENTED)
+     * Prevents pre-push hook from generating screenshots in main
+     *
+     * DEFAULT: false (opt-in feature)
+     * Most projects don't have screenshot generation.
+     * Enable only if your project has:
+     * - A `pnpm screenshots:quick` command
+     * - Pre-push hook that generates screenshots
+     *
+     * Configuration priority order:
+     *   1. ENABLE_SCREENSHOTS env var (.claude/mcp-servers.json)
+     *   2. Global config (~/.claude/mcp-config.json streamWorkflow.enableScreenshots)
+     *   3. Default: false (opt-in feature)
+     *
+     * When enabled:
+     * - Screenshots generated in worktree during prepare_merge
+     * - Committed to worktree before merge to main
+     * - Pre-push hook detects screenshots present and skips generation
+     * - Main branch stays clean (no uncommitted files)
+     *
+     * When disabled (default):
+     * - Screenshot generation skipped
+     * - No impact on projects without screenshot tooling
+     *
+     * Note: Screenshot command handles dev server automatically
+     */
+    generateScreenshots: screenshotConfig.enabled,
   },
+
+  // ============================================================================
+  // Screenshot Generation
+  // ============================================================================
+
+  /**
+   * Screenshot generation timeout (milliseconds)
+   * Allows time for dev server to start if needed
+   *
+   * The screenshot command handles server management:
+   * - Starts dev server if not running
+   * - Generates screenshots
+   * - Shuts down server if it started it
+   */
+  SCREENSHOT_TIMEOUT: 300000, // 5 minutes
 
   // ============================================================================
   // Development Mode
@@ -274,6 +356,14 @@ export const config: Config = {
  */
 export function getDeveloperModeSource(): string {
   return developerModeConfig.source;
+}
+
+/**
+ * Get the source of screenshot generation configuration
+ * Useful for logging on server startup
+ */
+export function getScreenshotConfigSource(): string {
+  return screenshotConfig.source;
 }
 
 /**
