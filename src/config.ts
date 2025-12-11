@@ -8,8 +8,9 @@
  */
 
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { homedir } from 'os';
+import { getMCPServiceSubdir } from '@3viky/mcp-common';
 import type { Config } from './types.js';
 
 /**
@@ -196,11 +197,33 @@ export const config: Config = {
 
   /**
    * Absolute path to worktrees directory
+   *
+   * Uses OS-specific cache directory for temporary/ephemeral data:
+   * - Linux: ~/.cache/mcp-services/stream-workflow-data/worktrees/<project-name>/
+   * - macOS: ~/Library/Caches/mcp-services/stream-workflow-data/worktrees/<project-name>/
+   * - Windows: %LOCALAPPDATA%/mcp-services/stream-workflow-data/worktrees/<project-name>/
+   *
    * Can be overridden via WORKTREE_ROOT environment variable
+   *
+   * Benefits:
+   * - Follows OS conventions for temporary data
+   * - Survives reboots but recognized as ephemeral
+   * - Doesn't pollute source code directories
+   * - Organizes worktrees by project name
    */
-  WORKTREE_ROOT:
-    process.env.WORKTREE_ROOT ||
-    '/var/home/viky/Code/applications/src/@egirl/egirl-platform-worktrees',
+  WORKTREE_ROOT: (() => {
+    // Allow override via environment variable
+    if (process.env.WORKTREE_ROOT) {
+      return process.env.WORKTREE_ROOT;
+    }
+
+    // Use OS-specific cache directory with project-specific subdirectory
+    const projectRoot = process.env.PROJECT_ROOT ||
+      '/var/home/viky/Code/applications/src/@egirl/egirl-platform';
+    const projectName = basename(projectRoot);
+
+    return getMCPServiceSubdir('stream-workflow', 'worktrees', projectName);
+  })(),
 
   /**
    * Path to stream status dashboard (relative to PROJECT_ROOT)

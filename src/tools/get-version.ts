@@ -7,7 +7,7 @@
 
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createVersionInfo, getPackageJsonPath } from '@mcp/common';
+import { createVersionInfo, getPackageJsonPath } from '@3viky/mcp-common';
 
 import type { MCPResponse } from '../types.js';
 

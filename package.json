@@ -35,10 +35,10 @@
     "merge",
     "conflict-resolution"
   ],
-  "author": "3viky",
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
   "license": "MIT",
   "dependencies": {
-    "@mcp/common": "workspace:*",
+    "@3viky/mcp-common": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "simple-git": "^3.27.0",
     "zod": "^3.23.8"
