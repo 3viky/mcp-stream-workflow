@@ -1,0 +1,317 @@
+#!/bin/bash
+# merge-worktree-to-main - Safe worktree merge with locking
+#
+# Purpose: Prevent multiple agents from merging to main simultaneously
+# Usage: ./merge-worktree-to-main <branch-name> [--squash] [--delete-worktree]
+#
+# Installation: Copy to .git-hooks/merge-worktree-to-main and chmod +x
+#
+# Features:
+# - Directory locking with .lock file
+# - Automatic retry (30 sec intervals, max 10 attempts)
+# - Validates worktree location before merge
+# - Prevents merge if main has uncommitted changes
+# - Optional worktree cleanup after merge
+
+set -e  # Exit on error
+
+# Dynamically determine main directory from git worktree root
+MAIN_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/.git$||')"
+if [ -z "$MAIN_DIR" ] || [ ! -d "$MAIN_DIR/.git" ]; then
+  # Fallback: navigate up from current worktree to find main
+  MAIN_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
+fi
+
+PROJECT_NAME=$(basename "$MAIN_DIR")
+PROJECT_PARENT=$(dirname "$MAIN_DIR")
+WORKTREE_ROOT="${PROJECT_PARENT}/${PROJECT_NAME}-worktrees"
+
+LOCK_FILE="$MAIN_DIR/.git/MERGE_LOCK"
+MAX_RETRIES=10
+RETRY_INTERVAL=30
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function: Print colored message
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Function: Acquire lock
+acquire_lock() {
+  local attempt=1
+
+  while [ $attempt -le $MAX_RETRIES ]; do
+    if mkdir "$LOCK_FILE" 2>/dev/null; then
+      # Lock acquired, write lock info
+      echo "$$" > "$LOCK_FILE/pid"
+      echo "$(date -Iseconds)" > "$LOCK_FILE/timestamp"
+      echo "$BRANCH_NAME" > "$LOCK_FILE/branch"
+      log_info "Lock acquired (PID: $$)"
+      return 0
+    else
+      # Lock exists, check if it's stale or active
+      if [ -f "$LOCK_FILE/pid" ]; then
+        # Lock has PID file - check if process is still running
+        local lock_pid=$(cat "$LOCK_FILE/pid")
+        local lock_time=$(cat "$LOCK_FILE/timestamp" 2>/dev/null || echo "unknown")
+        local lock_branch=$(cat "$LOCK_FILE/branch" 2>/dev/null || echo "unknown")
+
+        # Check if the process is still alive
+        if kill -0 "$lock_pid" 2>/dev/null; then
+          # Process exists, wait
+          log_warn "Directory locked by PID $lock_pid (branch: $lock_branch, since: $lock_time)"
+          log_warn "Retry $attempt/$MAX_RETRIES - waiting ${RETRY_INTERVAL}s..."
+          sleep $RETRY_INTERVAL
+        else
+          # Process doesn't exist, lock is stale
+          log_warn "Stale lock detected (dead process $lock_pid), removing..."
+          rm -rf "$LOCK_FILE"
+        fi
+      else
+        # Lock directory exists but no PID file - definitely stale
+        log_warn "Stale lock detected (no PID file), removing..."
+        rm -rf "$LOCK_FILE"
+      fi
+
+      # Always increment attempt counter to prevent infinite loop
+      attempt=$((attempt + 1))
+    fi
+  done
+
+  log_error "Failed to acquire lock after $MAX_RETRIES attempts"
+  exit 1
+}
+
+# Function: Release lock
+release_lock() {
+  if [ -d "$LOCK_FILE" ]; then
+    rm -rf "$LOCK_FILE"
+    log_info "Lock released"
+  fi
+}
+
+# Function: Check if we're in a worktree
+is_in_worktree() {
+  local current_dir=$(pwd)
+
+  # Method 1: Check if path contains -worktrees/
+  if [[ "$current_dir" == *"-worktrees/"* ]]; then
+    return 0
+  fi
+
+  # Method 2: Check git worktree list
+  if git rev-parse --git-dir 2>/dev/null | grep -q "worktrees"; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Function: Verify we're in a worktree (not main)
+verify_worktree_location() {
+  local current_dir=$(pwd)
+
+  if is_in_worktree; then
+    log_info "Working in worktree: $current_dir"
+    return 0
+  elif [[ "$current_dir" == "$MAIN_DIR"* ]] && [[ "$current_dir" != *"-worktrees"* ]]; then
+    log_error "BLOCKED: You're in the main directory!"
+    log_error "   Current: $current_dir"
+    log_error "   Expected: ${WORKTREE_ROOT}/stream-XX-name"
+    log_error ""
+    log_error "   Work must be done in worktrees."
+    exit 1
+  else
+    log_warn "Unknown directory: $current_dir"
+    log_warn "Expected pattern: ${WORKTREE_ROOT}/stream-*"
+    read -p "Continue anyway? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+      exit 1
+    fi
+  fi
+}
+
+# Function: Validate main directory is clean
+validate_main_clean() {
+  cd "$MAIN_DIR"
+
+  local status=$(git status --porcelain)
+  if [ -n "$status" ]; then
+    log_error "Main directory has uncommitted changes!"
+    log_error "This indicates another agent may be working in main (violation of worktree rule)"
+    log_error ""
+    git status --short
+    log_error ""
+    log_error "Action required:"
+    log_error "1. Check if another agent is running"
+    log_error "2. Review changes: git diff"
+    log_error "3. Either commit or stash the changes"
+    log_error "4. Then retry this merge"
+    exit 1
+  fi
+
+  log_info "Main directory is clean"
+}
+
+# Function: Handle merge conflicts with proper resolution guidance
+handle_merge_conflict() {
+  log_error ""
+  log_error "========================================="
+  log_error "  MERGE CONFLICT DETECTED"
+  log_error "========================================="
+  log_error ""
+  log_error "Conflicted files:"
+  git diff --name-only --diff-filter=U
+  log_error ""
+  log_error "========================================="
+  log_error "  CONFLICT RESOLUTION PROTOCOL"
+  log_error "========================================="
+  log_error ""
+  log_error "DO NOT use --ours or --theirs blindly!"
+  log_error "Both sides represent intentional work that must be PRESERVED."
+  log_error ""
+  log_error "Required steps:"
+  log_error "  1. Review BOTH sides of each conflict:"
+  log_error "     git diff --ours <file>    # What main has"
+  log_error "     git diff --theirs <file>  # What branch has"
+  log_error ""
+  log_error "  2. Understand the INTENT of each change:"
+  log_error "     - What was main trying to accomplish?"
+  log_error "     - What was the branch trying to accomplish?"
+  log_error ""
+  log_error "  3. MANUALLY EDIT to integrate BOTH changes:"
+  log_error "     - Open the conflicted file"
+  log_error "     - Remove conflict markers (<<<<<<, ======, >>>>>>)"
+  log_error "     - Combine logic from both sides thoughtfully"
+  log_error ""
+  log_error "  4. Mark as resolved and complete merge:"
+  log_error "     git add <resolved-file>"
+  log_error "     git commit"
+  log_error ""
+  log_error "  5. Then re-run this script to push."
+  log_error ""
+  log_error "========================================="
+  log_error "FORBIDDEN ACTIONS:"
+  log_error "========================================="
+  log_error "  git checkout --ours .     (discards branch work)"
+  log_error "  git checkout --theirs .   (discards main work)"
+  log_error "  git merge --abort && git merge -X ours"
+  log_error "  Removing features to avoid conflicts"
+  log_error ""
+  log_error "These actions DESTROY intentional work from other agents/sessions."
+  log_error ""
+  log_error "========================================="
+  log_error "Aborting merge. Resolve conflicts manually, then retry."
+  log_error "========================================="
+
+  # Abort the merge so the user can resolve properly
+  git merge --abort 2>/dev/null || true
+
+  # Release lock before exiting
+  release_lock
+  exit 1
+}
+
+# Trap to ensure lock is released on exit
+trap release_lock EXIT
+
+# Parse arguments
+BRANCH_NAME="$1"
+SQUASH_MERGE=false
+DELETE_WORKTREE=false
+
+if [ -z "$BRANCH_NAME" ]; then
+  log_error "Usage: $0 <branch-name> [--squash] [--delete-worktree]"
+  log_error "Example: $0 stream-04-feature --delete-worktree"
+  exit 1
+fi
+
+shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --squash)
+      SQUASH_MERGE=true
+      shift
+      ;;
+    --delete-worktree)
+      DELETE_WORKTREE=true
+      shift
+      ;;
+    *)
+      log_error "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+log_info "========================================="
+log_info "Merge Worktree to Main"
+log_info "========================================="
+log_info "Project: $PROJECT_NAME"
+log_info "Branch: $BRANCH_NAME"
+log_info "Squash: $SQUASH_MERGE"
+log_info "Delete worktree after merge: $DELETE_WORKTREE"
+log_info "========================================="
+log_info ""
+
+# Step 1: Verify we're in a worktree
+verify_worktree_location
+
+# Step 2: Acquire lock (with retry)
+log_info "Step 1: Acquiring merge lock..."
+acquire_lock
+
+# Step 3: Validate main is clean
+log_info "Step 2: Validating main directory..."
+validate_main_clean
+
+# Step 4: Fetch latest
+log_info "Step 3: Fetching latest changes..."
+git fetch origin main
+
+# Step 5: Switch to main and pull
+log_info "Step 4: Switching to main and pulling..."
+cd "$MAIN_DIR"
+git checkout main
+git pull origin main
+
+# Step 6: Merge the branch
+log_info "Step 5: Merging $BRANCH_NAME into main..."
+if [ "$SQUASH_MERGE" = true ]; then
+  if ! git merge --squash "$BRANCH_NAME"; then
+    handle_merge_conflict
+  fi
+  log_info "Squash merge complete. You need to commit manually."
+else
+  if ! git merge --no-ff "$BRANCH_NAME" -m "Merge branch '$BRANCH_NAME' into main"; then
+    handle_merge_conflict
+  fi
+fi
+
+# Step 7: Push to origin
+log_info "Step 6: Pushing to origin..."
+git push origin main
+
+# Step 8: Delete remote branch (optional)
+if [ "$DELETE_WORKTREE" = true ]; then
+  log_info "Step 7: Deleting remote branch..."
+  git push origin --delete "$BRANCH_NAME" 2>/dev/null || log_warn "Remote branch already deleted"
+
+  log_info "Step 8: Deleting local branch..."
+  git branch -d "$BRANCH_NAME" 2>/dev/null || log_warn "Local branch already deleted"
+
+  log_warn "Note: Worktree directory must be manually deleted:"
+  log_warn "  rm -rf ${WORKTREE_ROOT}/${BRANCH_NAME}"
+fi
+
+log_info ""
+log_info "========================================="
+log_info "Merge complete!"
+log_info "========================================="
+
+# Lock is automatically released by trap
