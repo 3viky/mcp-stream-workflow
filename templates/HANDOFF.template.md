@@ -29,11 +29,82 @@
 
 ---
 
+## Commit Guidelines
+
+**CRITICAL**: Commit your work atomically as you progress.
+
+### When to Commit
+
+✅ **DO commit** after:
+- Implementing a complete function or component
+- Fixing a bug (with test)
+- Completing a logical unit of work
+- Passing tests for a feature
+- Refactoring that doesn't change behavior
+
+❌ **DON'T commit**:
+- Broken/incomplete code
+- Code that doesn't compile
+- Failed tests
+- Debug code or console.logs
+
+### Commit Message Format
+
+```
+<type>(<scope>): <description>
+
+<body - optional>
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**Types**:
+- `feat`: New feature
+- `fix`: Bug fix
+- `refactor`: Code restructuring (no behavior change)
+- `test`: Add/update tests
+- `docs`: Documentation only
+- `chore`: Maintenance (deps, config, etc.)
+
+**Examples**:
+```bash
+git commit -m "feat(auth): Add JWT authentication middleware
+
+Implements token generation and validation using jsonwebtoken.
+Includes expiry handling and refresh token support.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+```bash
+git commit -m "fix(api): Handle null response in user endpoint
+
+Added null check before accessing user.profile.
+Returns 404 if user not found instead of 500 error.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+### Automatic Dashboard Sync
+
+**Good news**: You don't need to manually update STATUS_DASHBOARD.md!
+
+The system automatically syncs your progress every 3-5 commits:
+- Commit counter tracks your work
+- Post-commit hook triggers dashboard update
+- Dashboard shows: commits, files changed, latest message
+- Sync runs in background (non-blocking)
+
+Just keep committing atomically and the dashboard will stay current.
+
+---
+
 **Next Steps**:
 1. Navigate to worktree: `cd {{WORKTREE_PATH}}`
 2. Review this handoff
 3. Begin implementation
-4. When ready: call `prepare_merge`
+4. **Commit atomically as you go** (every logical unit)
+5. When ready: call `prepare_merge`
 
 ---
 
