@@ -174,9 +174,49 @@ stream-workflow-manager/
 | `ANTHROPIC_API_KEY` | Yes | API key for Claude AI conflict resolution |
 | `PROJECT_ROOT` | Yes | Path to main project directory |
 | `WORKTREE_ROOT` | Yes | Path to worktrees parent directory |
-| `DEVELOPER_MODE` | No | Enable self-modification features (default: false) |
+| `DEVELOPER_MODE` | No | Enable self-modification features (see below) |
 
-### Configuration File
+### DEVELOPER_MODE Configuration
+
+**For regular users**: Omit this setting. It defaults to `false` (user mode).
+
+**For MCP developers**: Enable self-modification features using either:
+
+1. **Global configuration** (recommended for creators):
+   - Create `~/.claude/mcp-config.json`:
+     ```json
+     {
+       "developerMode": true
+     }
+     ```
+   - Applies to all projects automatically
+   - See `mcp-config.json.example` for full template
+
+2. **Per-project configuration** (for specific projects):
+   - Add to `.claude/mcp-servers.json`:
+     ```json
+     {
+       "stream-workflow-manager": {
+         "env": {
+           "DEVELOPER_MODE": "true"
+         }
+       }
+     }
+     ```
+
+**Configuration hierarchy** (highest priority first):
+1. Per-project environment variable (`.claude/mcp-servers.json`)
+2. Global config file (`~/.claude/mcp-config.json`)
+3. Default: `false` (user mode)
+
+**What changes when enabled:**
+- MCP tool responses include self-improvement instructions
+- Agents receive extension points and update workflows
+- Error messages include fix instructions for the MCP server itself
+
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for complete developer guide.
+
+### Advanced Configuration
 
 Edit `src/config.ts` to customize:
 

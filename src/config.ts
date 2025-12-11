@@ -7,7 +7,77 @@
  * To modify: Create worktree, edit this file, test, merge.
  */
 
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import type { Config } from './types.js';
+
+/**
+ * Global MCP Configuration Interface
+ * Read from ~/.claude/mcp-config.json
+ */
+interface GlobalMCPConfig {
+  developerMode?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Read global MCP configuration from ~/.claude/mcp-config.json
+ * Returns null if file doesn't exist or is invalid
+ */
+function readGlobalConfig(): GlobalMCPConfig | null {
+  try {
+    const globalConfigPath = join(homedir(), '.claude', 'mcp-config.json');
+    if (!existsSync(globalConfigPath)) {
+      return null;
+    }
+    const content = readFileSync(globalConfigPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    console.error(
+      'Warning: Failed to read ~/.claude/mcp-config.json:',
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
+}
+
+/**
+ * Determine DEVELOPER_MODE from multiple sources
+ * Priority order:
+ *   1. Environment variable (DEVELOPER_MODE from .claude/mcp-servers.json)
+ *   2. Global config file (~/.claude/mcp-config.json)
+ *   3. Default: false
+ *
+ * @returns Object with enabled status and source
+ */
+function resolveDeveloperMode(): { enabled: boolean; source: string } {
+  // 1. Check environment variable (highest priority)
+  if (process.env.DEVELOPER_MODE !== undefined) {
+    return {
+      enabled: process.env.DEVELOPER_MODE === 'true',
+      source: 'environment variable (.claude/mcp-servers.json)',
+    };
+  }
+
+  // 2. Check global config file
+  const globalConfig = readGlobalConfig();
+  if (globalConfig?.developerMode !== undefined) {
+    return {
+      enabled: globalConfig.developerMode === true,
+      source: 'global config (~/.claude/mcp-config.json)',
+    };
+  }
+
+  // 3. Default to false (user mode)
+  return {
+    enabled: false,
+    source: 'default (user mode)',
+  };
+}
+
+// Resolve DEVELOPER_MODE and store for later reference
+const developerModeConfig = resolveDeveloperMode();
 
 export const config: Config = {
   // ============================================================================
@@ -188,13 +258,23 @@ export const config: Config = {
    * - No agent instructions for modifying the MCP server
    * - Error messages focus on usage, not internal implementation
    *
-   * Set via environment variable:
-   *   DEVELOPER_MODE=true in .claude/mcp-servers.json
+   * Configuration priority order:
+   *   1. Per-project: DEVELOPER_MODE env var in .claude/mcp-servers.json
+   *   2. Global: ~/.claude/mcp-config.json { "developerMode": true }
+   *   3. Default: false (user mode)
    *
    * See: DEVELOPMENT.md for full developer guide
    */
-  DEVELOPER_MODE: process.env.DEVELOPER_MODE === 'true',
+  DEVELOPER_MODE: developerModeConfig.enabled,
 };
+
+/**
+ * Get the source of DEVELOPER_MODE configuration
+ * Useful for logging on server startup
+ */
+export function getDeveloperModeSource(): string {
+  return developerModeConfig.source;
+}
 
 /**
  * Validate configuration

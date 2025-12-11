@@ -1,0 +1,79 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-config.json",
+
+  // ============================================================================
+  // Global MCP Configuration
+  // ============================================================================
+  //
+  // Location: ~/.claude/mcp-config.json
+  // Purpose: Global configuration for ALL MCP servers
+  //
+  // This file provides default settings that apply across all projects.
+  // Per-project settings in .claude/mcp-servers.json can override these.
+  //
+  // ============================================================================
+
+  // ----------------------------------------------------------------------------
+  // DEVELOPER_MODE (for MCP server development)
+  // ----------------------------------------------------------------------------
+  //
+  // Set to true if you're developing/maintaining MCP servers.
+  // When enabled, MCP servers will include self-improvement instructions
+  // in their responses to Claude Code agents.
+  //
+  // Recommended for:
+  //   - MCP server creators/maintainers
+  //   - Contributors working on MCP server code
+  //
+  // Not recommended for:
+  //   - Regular users who just want to use MCP servers
+  //   - Production environments
+  //
+  // Configuration hierarchy:
+  //   1. Per-project env var (.claude/mcp-servers.json) - highest priority
+  //   2. This global config file - fallback
+  //   3. Default: false - final fallback
+  //
+  "developerMode": true,
+
+  // ----------------------------------------------------------------------------
+  // Future Settings (reserved for expansion)
+  // ----------------------------------------------------------------------------
+  //
+  // These fields are reserved for future global MCP configuration options:
+  //
+  // "defaultTimeout": 60000,
+  // "logLevel": "info",
+  // "enableTelemetry": false,
+  // "mcpServerDefaults": {
+  //   "autoRestart": true,
+  //   "maxRetries": 3
+  // }
+
+  // ----------------------------------------------------------------------------
+  // Usage Examples
+  // ----------------------------------------------------------------------------
+  //
+  // Example 1: MCP Developer Configuration
+  // {
+  //   "developerMode": true
+  // }
+  //
+  // Example 2: Regular User Configuration
+  // {
+  //   "developerMode": false
+  // }
+  //
+  // Example 3: Per-project override
+  // ~/.claude/mcp-config.json:
+  //   { "developerMode": false }  // Global default: user mode
+  //
+  // project/.claude/mcp-servers.json:
+  //   {
+  //     "stream-workflow-manager": {
+  //       "env": {
+  //         "DEVELOPER_MODE": "true"  // Override for this project only
+  //       }
+  //     }
+  //   }
+}

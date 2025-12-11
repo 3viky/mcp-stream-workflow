@@ -19,7 +19,7 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { config, validateConfig } from './config.js';
+import { config, validateConfig, getDeveloperModeSource } from './config.js';
 import type { MCPResponse, ResponseMetadata, NoteToAgent } from './types.js';
 
 // Tool implementations
@@ -316,6 +316,7 @@ async function main(): Promise<void> {
   console.error(
     `Developer mode: ${config.DEVELOPER_MODE ? 'ENABLED (self-modification allowed)' : 'DISABLED (user mode)'}`
   );
+  console.error(`  → Source: ${getDeveloperModeSource()}`);
   if (config.DEVELOPER_MODE) {
     console.error(
       '  → Agents will receive self-improvement instructions. See DEVELOPMENT.md'

@@ -18,10 +18,30 @@ This server exists to help you work more efficiently with the egirl-platform wor
 
 ## Prerequisites
 
-Set `DEVELOPER_MODE=true` in your environment:
+Enable `DEVELOPER_MODE=true` to unlock self-modification features.
 
-```bash
-# In .claude/mcp-servers.json
+### Option 1: Global Configuration (Recommended for Creators)
+
+Create `~/.claude/mcp-config.json`:
+
+```json
+{
+  "developerMode": true
+}
+```
+
+**Benefits:**
+- Applies to all MCP servers automatically
+- No per-project configuration needed
+- Ideal for ongoing MCP development
+
+See `mcp-config.json.example` for full template.
+
+### Option 2: Per-Project Configuration
+
+Add to `.claude/mcp-servers.json`:
+
+```json
 {
   "stream-workflow-manager": {
     "env": {
@@ -30,9 +50,30 @@ Set `DEVELOPER_MODE=true` in your environment:
     }
   }
 }
+```
 
-# Or in your shell
-export DEVELOPER_MODE=true
+**Benefits:**
+- Only affects specific project
+- Useful for testing on single MCP server
+- Can override global setting
+
+### Configuration Hierarchy
+
+The MCP server checks in this order:
+1. **Per-project** environment variable (`.claude/mcp-servers.json`) - highest priority
+2. **Global** config file (`~/.claude/mcp-config.json`) - fallback
+3. **Default**: `false` (user mode) - final fallback
+
+### Verification
+
+Start the MCP server and check the logs:
+
+```
+Stream Workflow Manager MCP Server started
+Version: 0.1.0
+Developer mode: ENABLED (self-modification allowed)
+  → Source: global config (~/.claude/mcp-config.json)
+  → Agents will receive self-improvement instructions. See DEVELOPMENT.md
 ```
 
 **Without DEVELOPER_MODE:** Self-modification features are disabled, agents cannot update the MCP server.
