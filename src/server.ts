@@ -29,6 +29,7 @@ import { verifyLocation } from './tools/verify-location.js';
 import { prepareMerge } from './tools/prepare-merge.js';
 import { completeMerge } from './tools/complete-merge.js';
 import { completeStream } from './tools/complete-stream.js';
+import { getVersion } from './tools/get-version.js';
 
 const SERVER_VERSION = '0.1.0';
 
@@ -104,6 +105,18 @@ function createNoteToAgent(_toolName: string): NoteToAgent | null {
 }
 
 const TOOLS: Tool[] = [
+  {
+    name: 'get_version',
+    description:
+      'Get version information for this MCP server. ' +
+      'Returns package version, capabilities, and usage notes. ' +
+      'Safe to call anytime - read-only operation.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
   {
     name: 'start_stream',
     description:
@@ -286,6 +299,10 @@ async function main(): Promise<void> {
       let result: MCPResponse;
 
       switch (name) {
+        case 'get_version':
+          result = await getVersion();
+          break;
+
         case 'start_stream':
           result = await startStream(args as any);
           break;
