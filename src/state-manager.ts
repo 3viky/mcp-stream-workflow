@@ -377,7 +377,9 @@ function generateSubStreamId(
 async function ensureVersionAwareState(state: StreamState): Promise<StreamState> {
   // Already version-aware
   if (state.version && state.versionCounters) {
-    return state;
+    // Migrate version counter keys from unpadded to padded format
+    const migratedState = migrateVersionCounterKeys(state);
+    return migratedState;
   }
 
   // Migrate legacy state
@@ -407,6 +409,61 @@ async function ensureVersionAwareState(state: StreamState): Promise<StreamState>
   }
 
   return migratedState;
+}
+
+/**
+ * Migrate version counter keys from unpadded to padded format
+ * Ensures all version keys are 2-digit padded (e.g., "1" -> "01", "15" -> "15")
+ *
+ * @param state - Version-aware state
+ * @returns State with padded version counter keys
+ */
+function migrateVersionCounterKeys(state: StreamState): StreamState {
+  const projectVersion = getProjectMajorVersion();
+  let needsMigration = false;
+
+  // Check if current version is unpadded
+  if (state.version !== projectVersion) {
+    console.error(
+      `[state-manager] Migrating version key: "${state.version}" -> "${projectVersion}"`
+    );
+    state.version = projectVersion;
+    needsMigration = true;
+  }
+
+  // Check if any version counter keys are unpadded
+  const migratedCounters: Record<string, number> = {};
+  for (const [version, counter] of Object.entries(state.versionCounters || {})) {
+    const versionNum = parseInt(version, 10);
+    if (isNaN(versionNum)) {
+      console.error(`[state-manager] Warning: Invalid version key "${version}", skipping`);
+      continue;
+    }
+
+    // Pad version to 2 digits (unless > 99)
+    const paddedVersion = versionNum < 100 ? versionNum.toString().padStart(2, '0') : versionNum.toString();
+
+    if (version !== paddedVersion) {
+      console.error(
+        `[state-manager] Migrating version counter: "${version}" -> "${paddedVersion}" (counter: ${counter})`
+      );
+      needsMigration = true;
+    }
+
+    // Merge counters if both padded and unpadded versions exist (use max)
+    if (migratedCounters[paddedVersion] !== undefined) {
+      migratedCounters[paddedVersion] = Math.max(migratedCounters[paddedVersion], counter);
+    } else {
+      migratedCounters[paddedVersion] = counter;
+    }
+  }
+
+  if (needsMigration) {
+    state.versionCounters = migratedCounters;
+    console.error('[state-manager] Version counter migration complete');
+  }
+
+  return state;
 }
 
 /**

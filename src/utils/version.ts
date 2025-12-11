@@ -136,13 +136,14 @@ export function parseStreamNumber(streamNumber: string): {
 /**
  * Format stream number from components
  *
- * @param version - Major version (e.g., "15")
+ * @param version - Major version (e.g., "15", "1", "03")
  * @param counter - Stream counter within version (0-99)
  * @param suffix - Optional letter suffix for sub-streams
- * @returns Formatted stream number (e.g., "1500", "1500a")
+ * @returns Formatted 4-digit stream number (e.g., "1500", "0188", "1500a")
  *
  * Examples:
  *   formatStreamNumber("15", 0) -> "1500"
+ *   formatStreamNumber("1", 88) -> "0188"
  *   formatStreamNumber("15", 0, "a") -> "1500a"
  *   formatStreamNumber("15", 23) -> "1523"
  *   formatStreamNumber("15", 23, "b") -> "1523b"
@@ -164,6 +165,17 @@ export function formatStreamNumber(
     );
   }
 
+  // Parse version to ensure it's a valid number
+  const versionNum = parseInt(version, 10);
+  if (isNaN(versionNum) || versionNum < 0) {
+    throw new Error(
+      `Invalid version: ${version}. Must be a non-negative integer.`
+    );
+  }
+
+  // Always pad version to 2 digits (unless > 99)
+  const versionStr = versionNum < 100 ? versionNum.toString().padStart(2, '0') : versionNum.toString();
   const counterStr = counter.toString().padStart(2, '0');
-  return `${version}${counterStr}${suffix || ''}`;
+
+  return `${versionStr}${counterStr}${suffix || ''}`;
 }
