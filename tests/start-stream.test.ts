@@ -223,6 +223,47 @@ describe('start_stream - Environment Validation', () => {
     expect(result.content[0].text).toContain('test.txt');
   });
 
+  it('should categorize pollution files in error message', async () => {
+    // Create pollution files
+    writeFileSync(join(env.projectRoot, 'BUILD_SUMMARY.md'), 'pollution');
+    writeFileSync(join(env.projectRoot, 'config.bak'), 'pollution');
+
+    const args: StartStreamArgs = {
+      title: 'Test Stream',
+      category: 'backend',
+      priority: 'high',
+      handoff: 'Test handoff content',
+    };
+
+    const result = await startStream(args);
+
+    expect(result.content[0].text).toContain('Cannot start stream with uncommitted changes');
+    expect(result.content[0].text).toContain('🗑️  Detected agent pollution files');
+    expect(result.content[0].text).toContain('BUILD_SUMMARY.md');
+    expect(result.content[0].text).toContain('config.bak');
+    expect(result.content[0].text).toContain('Agent Cleanup Protocol');
+  });
+
+  it('should separate pollution from legitimate files', async () => {
+    // Create both pollution and legitimate files
+    writeFileSync(join(env.projectRoot, 'BUILD_SUMMARY.md'), 'pollution');
+    writeFileSync(join(env.projectRoot, 'src/index.ts'), 'legitimate');
+
+    const args: StartStreamArgs = {
+      title: 'Test Stream',
+      category: 'backend',
+      priority: 'high',
+      handoff: 'Test handoff content',
+    };
+
+    const result = await startStream(args);
+
+    expect(result.content[0].text).toContain('🗑️  Agent pollution (should be deleted)');
+    expect(result.content[0].text).toContain('BUILD_SUMMARY.md');
+    expect(result.content[0].text).toContain('✅ Legitimate work (should be committed)');
+    expect(result.content[0].text).toContain('src/index.ts');
+  });
+
   it('should error if main is behind origin/main', async () => {
     // This test requires a remote setup, which is complex in unit tests
     // We'll skip the actual remote check but verify the logic exists

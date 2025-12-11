@@ -32,6 +32,7 @@ import { getNextStreamId, registerStream } from '../state-manager.js';
 import { addStream } from '../dashboard-manager.js';
 import { renderTemplate } from '../utils/template-renderer.js';
 import type { StartStreamArgs, MCPResponse } from '../types.js';
+import { categorizeFiles, generateUncommittedChangesError } from '../utils/file-categorizer.js';
 
 // ============================================================================
 // Response Types
@@ -95,13 +96,13 @@ async function validateEnvironment(): Promise<void> {
   // 3. Verify main is clean
   const status = await git.status();
   if (!status.isClean()) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const changes = status.files.map((f) => `  - ${f.path} (${(f as any).working_dir})`).join('\n');
-    throw new Error(
-      `Cannot start stream with uncommitted changes in main.\n\n` +
-        `Uncommitted changes:\n${changes}\n\n` +
-        `Fix: Commit or stash changes before starting stream`
-    );
+    // Extract file paths and categorize
+    const filePaths = status.files.map((f) => f.path);
+    const category = categorizeFiles(filePaths);
+
+    // Generate smart error message based on categorization
+    const errorMessage = generateUncommittedChangesError(category);
+    throw new Error(errorMessage);
   }
 
   // 4. Verify main is up-to-date with origin
