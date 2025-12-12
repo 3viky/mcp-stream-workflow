@@ -2,14 +2,18 @@
  * Stream Workflow Manager MCP Server
  *
  * AI-powered worktree workflow automation for egirl-platform.
- * Implements the complete merge protocol as MCP tools.
+ * Implements the complete merge protocol as MCP tools with distributed git-based locking.
  *
  * Tools implemented:
  * - start_stream: Initialize new development stream [Step A]
  * - verify_location: Enforce worktree-only development
+ * - check_lock_status: Check active merge locks (debugging)
  * - prepare_merge: Merge main into worktree + AI conflict resolution [Steps B,C,D,E,F]
- * - complete_merge: Fast-forward main from worktree [Steps G,H,I]
+ * - complete_merge: Fast-forward main from worktree with distributed lock [Steps G,H,I]
  * - complete_stream: Archive and cleanup [Steps J,K,L]
+ *
+ * Lock mechanism: Uses git branches (refs/locks/merge-in-progress) for distributed locking
+ * that works across multiple machines/agents, preventing concurrent merges to main.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -29,6 +33,7 @@ import { verifyLocation } from './tools/verify-location.js';
 import { prepareMerge } from './tools/prepare-merge.js';
 import { completeMerge } from './tools/complete-merge.js';
 import { completeStream } from './tools/complete-stream.js';
+import { checkLockStatus } from './tools/check-lock-status.js';
 import { getVersion } from './tools/get-version.js';
 
 const SERVER_VERSION = '0.1.0';
@@ -181,6 +186,19 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'check_lock_status',
+    description:
+      'Check if a merge lock is currently active. ' +
+      'Returns lock information including which stream holds the lock, when it was acquired, and whether it is stale. ' +
+      'Safe to call anytime - read-only operation. ' +
+      'Useful for debugging blocked merges.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: 'prepare_merge',
     description:
       'REQUIRES EXPLICIT USER DIRECTION. Do NOT call autonomously. ' +
@@ -309,6 +327,10 @@ async function main(): Promise<void> {
 
         case 'verify_location':
           result = await verifyLocation(args as { workingDir?: string });
+          break;
+
+        case 'check_lock_status':
+          result = await checkLockStatus();
           break;
 
         case 'prepare_merge':

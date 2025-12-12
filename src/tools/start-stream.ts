@@ -280,7 +280,7 @@ async function createMetadataFiles(
  * - STREAM_STATE.json - Add to stream registry
  *
  * Stream status tracking is now handled by the separate
- * @mcp/stream-workflow-status service.
+ * @mcp/mcp-stream-workflow-status service.
  *
  * @param args User-provided stream parameters
  * @param streamInfo Generated stream ID and number

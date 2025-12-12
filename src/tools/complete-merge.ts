@@ -9,12 +9,11 @@
  * PREREQUISITE: Call prepare_merge first!
  */
 
-import { existsSync, mkdirSync, rmdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
-import type { MCPResponse, CompleteMergeResponse, LockInfo } from '../types.js';
+import type { MCPResponse, CompleteMergeResponse } from '../types.js';
+import { acquireGitLock, releaseGitLock, formatGitLockError } from '../utils/git-lock.js';
 
 interface CompleteMergeArgs {
   streamId: string;
@@ -26,7 +25,6 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
 
   const mainPath = config.PROJECT_ROOT;
   const git: SimpleGit = simpleGit(mainPath);
-  const lockPath = join(mainPath, config.MERGE_LOCK_DIR);
 
   const response: CompleteMergeResponse = {
     success: false,
@@ -39,18 +37,20 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
   let lockAcquired = false;
 
   try {
-    // Step 0: Acquire merge lock
-    lockAcquired = await acquireLock(lockPath, streamId);
-    if (!lockAcquired) {
+    // Step 0: Acquire distributed git-based merge lock
+    const lockResult = await acquireGitLock(git, streamId, 'complete_merge');
+    if (!lockResult.acquired) {
       return {
         content: [
           {
             type: 'text',
-            text: formatLockError(streamId, lockPath),
+            text: formatGitLockError(streamId, lockResult.lockInfo),
           },
         ],
       };
     }
+
+    lockAcquired = true;
 
     // Step G: Verify we're in main directory context
     const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
@@ -63,7 +63,7 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
     // Verify main is clean
     const status = await git.status();
     if (!status.isClean()) {
-      releaseLock(lockPath);
+      await releaseGitLock(git);
       return {
         content: [
           {
@@ -83,7 +83,7 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
     try {
       await git.merge([streamId, '--ff-only']);
     } catch (mergeError) {
-      releaseLock(lockPath);
+      await releaseGitLock(git);
       return {
         content: [
           {
@@ -116,8 +116,8 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
 
     response.success = true;
 
-    // Release lock
-    releaseLock(lockPath);
+    // Release distributed lock
+    await releaseGitLock(git);
 
     return {
       content: [
@@ -130,7 +130,7 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
   } catch (error) {
     // Always release lock on error
     if (lockAcquired) {
-      releaseLock(lockPath);
+      await releaseGitLock(git);
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -145,80 +145,6 @@ export async function completeMerge(args: CompleteMergeArgs): Promise<MCPRespons
   }
 }
 
-async function acquireLock(lockPath: string, streamId: string): Promise<boolean> {
-  const maxRetries = config.LOCK_MAX_RETRIES;
-  const retryInterval = config.LOCK_RETRY_INTERVAL;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // Atomic directory creation = lock acquisition
-      mkdirSync(lockPath, { recursive: false });
-
-      // Write lock info
-      const lockInfo: LockInfo = {
-        pid: process.pid,
-        timestamp: new Date(),
-        streamId,
-        operation: 'complete_merge',
-      };
-      writeFileSync(join(lockPath, 'info.json'), JSON.stringify(lockInfo, null, 2));
-
-      console.error(`[complete_merge] Lock acquired on attempt ${attempt + 1}`);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-        // Lock exists - check if stale
-        const isStale = await checkStaleLock(lockPath);
-        if (isStale) {
-          console.error(`[complete_merge] Removing stale lock...`);
-          rmdirSync(lockPath, { recursive: true });
-          continue; // Retry
-        }
-
-        if (attempt < maxRetries - 1) {
-          console.error(
-            `[complete_merge] Lock held by another process, waiting ${retryInterval / 1000}s (attempt ${attempt + 1}/${maxRetries})...`
-          );
-          await sleep(retryInterval);
-        }
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  return false;
-}
-
-async function checkStaleLock(lockPath: string): Promise<boolean> {
-  try {
-    const infoPath = join(lockPath, 'info.json');
-    if (!existsSync(infoPath)) {
-      return true; // No info file = stale
-    }
-
-    const info: LockInfo = JSON.parse(readFileSync(infoPath, 'utf-8'));
-    const lockAge = Date.now() - new Date(info.timestamp).getTime();
-
-    // Lock is stale if older than timeout
-    return lockAge > config.MERGE_LOCK_TIMEOUT;
-  } catch {
-    return true; // Error reading = stale
-  }
-}
-
-function releaseLock(lockPath: string): void {
-  try {
-    rmdirSync(lockPath, { recursive: true });
-    console.error(`[complete_merge] Lock released`);
-  } catch {
-    console.error(`[complete_merge] Warning: Could not release lock`);
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function formatSuccess(response: CompleteMergeResponse, streamId: string): string {
   return `
@@ -237,26 +163,6 @@ NEXT STEP:
 `.trim();
 }
 
-function formatLockError(streamId: string, lockPath: string): string {
-  return `
-MERGE LOCK FAILED
-
-Stream: ${streamId}
-Lock Path: ${lockPath}
-
-Another merge operation is in progress.
-
-Waited ${(config.LOCK_RETRY_INTERVAL * config.LOCK_MAX_RETRIES) / 1000} seconds but lock was not released.
-
-TO FIX:
-1. Wait for other merge to complete
-2. If stuck, manually remove lock:
-   rm -rf ${lockPath}
-3. Retry complete_merge
-
-WHY: Only one agent can merge to main at a time to prevent conflicts.
-`.trim();
-}
 
 function formatDirtyMainError(streamId: string, files: string[]): string {
   return `

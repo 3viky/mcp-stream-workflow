@@ -23,6 +23,7 @@ import { config } from '../config.js';
 import type { MCPResponse } from '../types.js';
 import { extractConflicts, formatConflictsForAgent } from '../conflict-resolver.js';
 import { runValidation } from '../validators/index.js';
+import { checkGitLock } from '../utils/git-lock.js';
 
 const execAsync = promisify(exec);
 
@@ -38,8 +39,18 @@ export async function prepareMerge(args: PrepareMergeArgs): Promise<MCPResponse>
 
   const worktreePath = join(config.WORKTREE_ROOT, streamId);
   const git: SimpleGit = simpleGit(worktreePath);
+  const mainGit: SimpleGit = simpleGit(config.PROJECT_ROOT);
 
   try {
+    // Step 0: Check if another merge is in progress
+    const lockStatus = await checkGitLock(mainGit);
+    if (lockStatus.exists && !lockStatus.isStale) {
+      console.warn(
+        `[prepare_merge] Warning: Another merge is in progress (stream: ${lockStatus.info?.streamId})`
+      );
+      console.warn(`[prepare_merge] This stream can prepare, but may need to re-prepare if main changes`);
+    }
+
     // Step A: Verify work is committed
     const status = await git.status();
     if (!status.isClean()) {
