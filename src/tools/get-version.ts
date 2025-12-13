@@ -5,22 +5,15 @@
  * Use this to verify which version of the MCP server is running.
  */
 
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createVersionInfo, getPackageJsonPath } from '@3viky/mcp-common';
+import { createVersionInfo } from '@3viky/mcp-common';
 
 import type { MCPResponse } from '../types.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 export async function getVersion(): Promise<MCPResponse> {
   try {
-    const packagePath = getPackageJsonPath(__dirname);
-
-    const versionInfo = createVersionInfo(
-      packagePath,
-      [
+    const versionInfo = {
+      ...createVersionInfo(import.meta.url),
+      tools: [
         'get_version - Get version and capabilities (safe, read-only)',
         'start_stream - Initialize new development stream',
         'verify_location - Verify worktree location (safe, read-only)',
@@ -28,13 +21,13 @@ export async function getVersion(): Promise<MCPResponse> {
         'complete_merge - Fast-forward merge worktree to main',
         'complete_stream - Archive and cleanup completed stream',
       ],
-      {
+      toolMetadata: {
         safeToCall: ['get_version', 'verify_location'],
         requiresUserApproval: ['prepare_merge', 'complete_merge', 'complete_stream'],
         runInMain: ['start_stream'],
         runInWorktree: ['verify_location', 'prepare_merge', 'complete_merge', 'complete_stream'],
-      }
-    );
+      },
+    };
 
     return {
       content: [

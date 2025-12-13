@@ -10,7 +10,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
-import { getMCPServiceSubdir } from '@3viky/mcp-common';
+import { getMCPServiceDataDir } from '@3viky/mcp-common';
 import type { Config } from './types.js';
 
 /**
@@ -222,7 +222,7 @@ export const config: Config = {
       '/var/home/viky/Code/applications/src/@egirl/egirl-platform';
     const projectName = basename(projectRoot);
 
-    return getMCPServiceSubdir('stream-workflow', 'worktrees', projectName);
+    return join(getMCPServiceDataDir('stream-workflow'), 'worktrees', projectName);
   })(),
 
   /**
