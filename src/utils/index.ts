@@ -21,3 +21,12 @@ export {
   type TemplateVariables,
   type RenderResult,
 } from './template-renderer.js';
+
+export {
+  createBackup,
+  verifyBackup,
+  listBackups,
+  cleanOldBackups,
+  type BackupOptions,
+  type BackupResult,
+} from './backup-manager.js';
