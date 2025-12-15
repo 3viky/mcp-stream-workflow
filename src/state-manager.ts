@@ -26,7 +26,7 @@ import {
 import { join, dirname } from 'node:path';
 
 import { config } from './config.js';
-import type { LockInfo } from './types.js';
+import type { LockInfo, ActiveStreamContext, ActiveStreamsMap } from './types.js';
 import { getProjectMajorVersion, formatStreamNumber } from './utils/version.js';
 
 // ============================================================================
@@ -58,6 +58,10 @@ export interface StreamState {
   // Common fields
   streams: Record<string, StreamMetadata>;
   lastSync: string; // ISO timestamp
+
+  // Active streams context (v0.3.0+) - survives context compaction
+  // Multiple streams can be active simultaneously in different worktrees
+  activeStreams?: ActiveStreamsMap;
 }
 
 /**
@@ -832,4 +836,96 @@ TO FIX:
 
 WHY: State file modifications must be serialized to prevent corruption.
 `.trim();
+}
+
+// ============================================================================
+// Active Stream Context Management (Post-Compaction Recovery)
+// ============================================================================
+
+/**
+ * Set/update an active stream context
+ * Call this when starting or resuming work on a stream
+ * Multiple streams can be active simultaneously
+ *
+ * @param context - Active stream information
+ */
+export async function setActiveStream(context: ActiveStreamContext): Promise<void> {
+  return withStateLock(async () => {
+    const state = await loadState();
+    if (!state.activeStreams) {
+      state.activeStreams = {};
+    }
+    state.activeStreams[context.streamId] = {
+      ...context,
+      lastAccessedAt: context.lastAccessedAt || new Date().toISOString(),
+    };
+    await saveState(state);
+    console.error(`[state-manager] Active stream set: ${context.streamId}`);
+  });
+}
+
+/**
+ * Clear a specific stream from active context
+ * Call this when completing a stream
+ *
+ * @param streamId - Stream to remove from active tracking
+ */
+export async function clearActiveStream(streamId?: string): Promise<void> {
+  return withStateLock(async () => {
+    const state = await loadState();
+    if (!state.activeStreams) return;
+
+    if (streamId) {
+      // Clear specific stream
+      if (state.activeStreams[streamId]) {
+        delete state.activeStreams[streamId];
+        console.error(`[state-manager] Active stream cleared: ${streamId}`);
+      }
+    } else {
+      // Clear all (legacy behavior)
+      state.activeStreams = {};
+      console.error(`[state-manager] All active streams cleared`);
+    }
+    await saveState(state);
+  });
+}
+
+/**
+ * Get all active stream contexts
+ * Returns empty object if no streams are active
+ *
+ * This is a read-only operation - no lock needed
+ */
+export async function getAllActiveStreams(): Promise<ActiveStreamsMap> {
+  const state = await loadState();
+  return state.activeStreams || {};
+}
+
+/**
+ * Get the most recently accessed active stream
+ * Useful as a hint when agent is in main directory
+ * Returns null if no streams are active
+ */
+export async function getMostRecentActiveStream(): Promise<ActiveStreamContext | null> {
+  const state = await loadState();
+  if (!state.activeStreams) return null;
+
+  const streams = Object.values(state.activeStreams);
+  if (streams.length === 0) return null;
+
+  // Sort by lastAccessedAt descending, return most recent
+  streams.sort((a, b) =>
+    new Date(b.lastAccessedAt).getTime() - new Date(a.lastAccessedAt).getTime()
+  );
+
+  return streams[0];
+}
+
+/**
+ * Get a specific active stream by ID
+ * Returns null if stream is not in active tracking
+ */
+export async function getActiveStream(streamId: string): Promise<ActiveStreamContext | null> {
+  const state = await loadState();
+  return state.activeStreams?.[streamId] || null;
 }
