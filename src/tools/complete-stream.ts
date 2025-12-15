@@ -15,6 +15,7 @@ import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
 import type { MCPResponse, CompleteStreamResponse } from '../types.js';
+import { clearActiveStream } from '../state-manager.js';
 
 interface CompleteStreamArgs {
   streamId: string;
@@ -124,6 +125,10 @@ export async function completeStream(args: CompleteStreamArgs): Promise<MCPRespo
         await git.push('origin', 'main');
       }
     }
+
+    // Clear this stream from active tracking
+    await clearActiveStream(streamId);
+    console.error(`[complete_stream] Cleared active stream context for ${streamId}`);
 
     response.success = true;
 

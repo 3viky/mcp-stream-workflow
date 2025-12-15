@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
-import { getNextStreamId, registerStream } from '../state-manager.js';
+import { getNextStreamId, registerStream, setActiveStream } from '../state-manager.js';
 import { renderTemplate } from '../utils/template-renderer.js';
 import type { StartStreamArgs, MCPResponse } from '../types.js';
 import { categorizeFiles, generateUncommittedChangesError } from '../utils/file-categorizer.js';
@@ -526,6 +526,13 @@ export async function startStream(args: StartStreamArgs): Promise<MCPResponse> {
 
     // Phase 6: Create worktree
     const worktreePath = await createWorktree(streamId);
+
+    // Phase 6.5: Set active stream context (for post-compaction recovery)
+    await setActiveStream({
+      streamId,
+      worktreePath,
+      lastAccessedAt: new Date().toISOString(),
+    });
 
     // Phase 7: Format response
     const response: StartStreamResponse = {
