@@ -544,3 +544,43 @@ export interface PostMergeHook {
   name: string;
   run(context: MergeContext): Promise<void>;
 }
+
+// ============================================================================
+// Active Stream Context (Post-Compaction Recovery)
+// ============================================================================
+
+/**
+ * Active stream context - tracks stream working context
+ * Used for post-compaction recovery when agent loses awareness
+ *
+ * NOTE: Multiple streams can be active simultaneously in different worktrees.
+ * This tracks the LAST stream that was explicitly activated/worked on,
+ * useful as a hint when agent is in main directory.
+ */
+export interface ActiveStreamContext {
+  /** The stream ID being worked on (e.g., "stream-1500-auth") */
+  streamId: string;
+  /** Absolute path to the worktree directory */
+  worktreePath: string;
+  /** ISO timestamp when this stream was last activated/accessed */
+  lastAccessedAt: string;
+  /** Optional: track which agent session activated this */
+  agentSessionId?: string;
+}
+
+/**
+ * Multiple active streams tracking
+ * Keyed by streamId for O(1) lookup
+ */
+export type ActiveStreamsMap = Record<string, ActiveStreamContext>;
+
+/**
+ * Context information for tool response headers
+ * Helps agents maintain location awareness
+ */
+export interface ContextInfo {
+  currentDir: string;
+  streamId?: string;
+  branch?: string;
+  isWorktree: boolean;
+}
