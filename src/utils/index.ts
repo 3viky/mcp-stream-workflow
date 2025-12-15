@@ -30,3 +30,9 @@ export {
   type BackupOptions,
   type BackupResult,
 } from './backup-manager.js';
+
+export {
+  generateContextHeader,
+  getCurrentContext,
+  generateLocationWarning,
+} from './context-header.js';
