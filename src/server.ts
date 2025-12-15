@@ -35,6 +35,7 @@ import { completeMerge } from './tools/complete-merge.js';
 import { completeStream } from './tools/complete-stream.js';
 import { checkLockStatus } from './tools/check-lock-status.js';
 import { getVersion } from './tools/get-version.js';
+import { getActiveContext } from './tools/get-active-context.js';
 
 const SERVER_VERSION = '0.1.0';
 
@@ -123,11 +124,26 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'get_active_context',
+    description:
+      'CRITICAL: Call this FIRST after context compaction, session resume, or "let\'s continue" requests. ' +
+      'Returns which stream you should be working on and whether you are in the correct directory. ' +
+      'If in wrong directory, provides navigation instructions. ' +
+      'Safe to call frequently - read-only operation. ' +
+      'USE THIS to recover your working context after any context loss.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: 'start_stream',
     description:
       'Initialize a new development stream. ' +
       'RUNS IN MAIN (only legitimate exception to worktree-only rule). ' +
-      'Creates metadata, commits to main, creates worktree. ' +
+      'Creates metadata, commits to main, creates worktree, and SETS ACTIVE STREAM CONTEXT. ' +
+      'After calling this, navigate to the returned worktree path. ' +
       'Call this BEFORE beginning work on a new feature/fix.',
     inputSchema: {
       type: 'object',
@@ -171,9 +187,11 @@ const TOOLS: Tool[] = [
   {
     name: 'verify_location',
     description:
-      'Verify current working directory is a valid worktree (not main). ' +
-      'Returns stream info if in valid worktree, error if in main directory. ' +
-      'Safe to call anytime - read-only operation.',
+      'CRITICAL: Call this FIRST after context compaction, session resume, or before file modifications. ' +
+      'Verifies current working directory is a valid worktree (not main). ' +
+      'Returns stream info if valid, provides navigation instructions if in wrong directory. ' +
+      'Safe to call frequently - read-only operation. ' +
+      'WHEN TO CALL: After any context loss, before making file modifications, when unsure of location.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,6 +220,7 @@ const TOOLS: Tool[] = [
     name: 'prepare_merge',
     description:
       'REQUIRES EXPLICIT USER DIRECTION. Do NOT call autonomously. ' +
+      'PREREQUISITE: Call verify_location or get_active_context first to confirm correct worktree. ' +
       'Merge main into worktree and detect conflicts. ' +
       'User must explicitly request: "merge", "prepare merge", "sync with main", etc. ' +
       'If conflicts detected, returns them for agent resolution, then user must re-request.',
@@ -230,9 +249,9 @@ const TOOLS: Tool[] = [
     name: 'complete_merge',
     description:
       'REQUIRES EXPLICIT USER DIRECTION. Do NOT call autonomously. ' +
+      'PREREQUISITE: Call verify_location first AND prepare_merge must succeed first. ' +
       'Fast-forward merge worktree into main and push. ' +
-      'User must explicitly request: "merge to main", "complete merge", "finish stream", etc. ' +
-      'PREREQUISITE: prepare_merge must succeed first.',
+      'User must explicitly request: "merge to main", "complete merge", "finish stream", etc.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -319,6 +338,10 @@ async function main(): Promise<void> {
       switch (name) {
         case 'get_version':
           result = await getVersion();
+          break;
+
+        case 'get_active_context':
+          result = await getActiveContext();
           break;
 
         case 'start_stream':
