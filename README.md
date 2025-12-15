@@ -20,6 +20,90 @@ Stream Workflow Manager is a Model Context Protocol (MCP) server that automates 
 - **AI-Powered Merge Resolution**: Uses Claude to intelligently resolve merge conflicts with context-aware strategies
 - **Concurrency Control**: Prevents merge conflicts through atomic operations and locking
 - **Validation Pipeline**: Runs TypeScript, build, and lint checks after conflict resolution
+- **Post-Compaction Recovery**: Maintains active stream context that survives Claude Code context compaction
+
+---
+
+## Post-Compaction Recovery (v0.3.0+)
+
+When Claude Code compacts context (during long sessions or after breaks), agents may lose awareness of which worktree they should be working in. This can cause the agent to accidentally work in the main directory.
+
+### The Problem
+
+After compaction, agents might:
+1. Forget they were working in a worktree
+2. Start making changes in the main directory
+3. Cause merge conflicts or lost work
+
+### The Solution
+
+The MCP server tracks **multiple active streams** that persist across compaction:
+
+```typescript
+// After starting a stream, context is automatically saved
+await mcp__stream-workflow__start_stream({ ... });
+// Stream is now tracked as active
+
+// Multiple streams can be active simultaneously!
+await mcp__stream-workflow__start_stream({ title: "Feature A", ... });
+await mcp__stream-workflow__start_stream({ title: "Feature B", ... });
+
+// After compaction or session resume, recover context:
+await mcp__stream-workflow__get_active_context();
+// Returns: list of ALL active streams if in main, or current stream if in worktree
+```
+
+### Multi-Stream Support
+
+The system supports multiple simultaneous active streams:
+- Each `start_stream` call adds to the active streams list
+- `get_active_context` lists ALL active streams when called from main
+- Streams sorted by "last accessed" to help identify most relevant
+- `complete_stream` removes only that specific stream from tracking
+
+### When to Use
+
+| Scenario | Tool to Call |
+|----------|-------------|
+| After "let's continue" or session resume | `get_active_context` |
+| After context compaction message | `get_active_context` |
+| Before making file modifications | `verify_location` |
+| Unsure which stream you're working on | `get_active_context` |
+
+### Example Response - Multiple Streams
+
+When in main directory with multiple active streams:
+```
+⚠️ IN MAIN DIRECTORY - SELECT A STREAM
+
+Current Directory: /path/to/main
+Status: DO NOT MODIFY FILES HERE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTIVE STREAMS (3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. stream-1502-api-refactor ← MOST RECENT
+     Path: /path/to/worktrees/stream-1502-api-refactor
+     Last: 12/14/2025, 3:45:00 PM
+
+  2. stream-1501-auth-system
+     Path: /path/to/worktrees/stream-1501-auth-system
+     Last: 12/14/2025, 2:30:00 PM
+
+  3. stream-1500-ui-updates
+     Path: /path/to/worktrees/stream-1500-ui-updates
+     Last: 12/14/2025, 10:15:00 AM
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTION REQUIRED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+To continue on most recent stream:
+  cd /path/to/worktrees/stream-1502-api-refactor
+
+Or navigate to any stream listed above.
+```
 
 ---
 
@@ -75,6 +159,7 @@ Exit and restart Claude Code to load the MCP server.
 
 | Tool | Description | Status |
 |------|-------------|--------|
+| `get_active_context` | **CRITICAL**: Recovers working context after compaction/session resume | ✅ NEW |
 | `start_stream` | Initialize new stream with metadata in main, create worktree | ✅ Implemented |
 | `verify_location` | Checks if current directory is a worktree, blocks operations in main | ✅ Implemented |
 | `create_stream` | Creates new worktree + branch + stream tracking file | ✅ Implemented |
