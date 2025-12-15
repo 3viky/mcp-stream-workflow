@@ -24,13 +24,16 @@ When agents use `EnterPlanMode` during stream work, they create plan files in `~
 
 ---
 
-## When Plan Mode IS NOT Appropriate
+## When Plan Mode IS NOT Appropriate (NEVER)
 
-❌ DO NOT use plan mode for:
+❌ **NEVER use plan mode for stream work**:
 - **Starting new streams**: Use `mcp__stream-workflow__start_stream` directly
 - **Active stream work**: Work happens in worktrees, not plan files
-- **Merge operations**: Plan mode doesn't help with merge complexity
+- **Merge operations**: Use `prepare_merge` → `complete_merge` tools
 - **Any work tracked by `.project/plan/streams/`**: Stream metadata supersedes plan files
+- **ANY stream workflow**: Plan mode is redundant. Streams ARE the planning system.
+
+**The core principle**: Streams replace plan mode. The stream README, HANDOFF, and STATUS files ARE your plan — they're checked into git and shared across sessions.
 
 ---
 
@@ -84,46 +87,16 @@ User: "Add user authentication to the payment system"
 
 ---
 
-## If You DO Use Plan Mode
+## Plan Mode is Never Needed for Streams
 
-**MANDATORY cleanup**:
+Stream workflows provide built-in planning through:
+- **HANDOFF.md**: What needs to be done (replaces plan file)
+- **README.md**: Stream metadata and context
+- **STATUS.md**: Progress tracking and phase completion
 
-1. Create plan file (temporary)
-2. Implement per plan (code changes in git)
-3. **IMMEDIATELY after implementation completes** → Delete plan file:
-   ```bash
-   rm ~/.claude/plans/fluffy-dancing-penguin.md
-   ```
+These files are checked into git and visible to all Claude Code sessions. They are the authoritative plan.
 
-**NO EXCEPTIONS**: Even partial work → delete plan file after done.
-
----
-
-## Exception: Pre-Stream Analysis
-
-If you need to analyze a project BEFORE starting a stream:
-
-✅ **CORRECT**:
-```bash
-# 1. Use plan mode to analyze & design
-mcp__stream-workflow__start_stream()  # ← BEFORE creating plan
-
-# 2. Plan what you'll do (temporary planning)
-# 3. Delete plan file after analysis
-rm ~/.claude/plans/analysis-*.md
-
-# 4. Then use stream workflow
-mcp__stream-workflow__start_stream()
-```
-
-✅ **ALTERNATIVE** (recommended):
-```bash
-# Skip plan mode entirely
-mcp__stream-workflow__start_stream()
-
-# Document findings in README.md INSIDE the stream
-# (use stream status file to capture decisions)
-```
+There is no "use plan mode and then clean up later" for streams. **Don't create the plan file in the first place.**
 
 ---
 
@@ -145,30 +118,29 @@ mcp__stream-workflow__start_stream()
 ```
 Starting work on a project?
 ├─ YES: Is it tracked by stream workflow?
-│  ├─ YES: Use mcp__stream-workflow__start_stream()
-│  │       (NO plan mode)
-│  │
-│  └─ NO: Is it complex enough to need pre-planning?
-│     ├─ YES: Use plan mode TEMPORARILY
-│     │       Then DELETE plan file after analysis
-│     │
-│     └─ NO: Start coding directly (skip plan mode)
+│  └─ YES/NO: Use mcp__stream-workflow__start_stream()
+│            if it's real work (not one-off analysis)
 │
-└─ NO: General research/exploration?
-   └─ Plan mode OK (with cleanup after)
+│            If it IS real work → NEVER use plan mode
+│            Stream files ARE your plan
+│
+└─ NO: General research/exploration outside stream workflow?
+   └─ Plan mode OK (for non-stream work only)
 ```
+
+**Rule of thumb**: If you're asking "should I use plan mode?", check `.project/plan/streams/`. If a stream exists for this work, the answer is NO.
 
 ---
 
-## Cleanup Verification
+## State Verification
 
-After using plan mode:
+During stream work:
 
 ```bash
-# MUST return empty
+# This MUST be empty (stream work never creates plan files)
 ls ~/.claude/plans/
 
-# If not empty:
+# If not empty: investigate and delete
 rm ~/.claude/plans/*.md
 ```
 
@@ -176,14 +148,15 @@ rm ~/.claude/plans/*.md
 
 ## Why This Matters
 
-The stream workflow system relies on `.project/plan/streams/` and `.project/.stream-state.json` as **authoritative state**. When old plan files accumulate in `~/.claude/plans/`, they:
+The stream workflow system relies on `.project/plan/streams/` and `.project/.stream-state.json` as **authoritative state**.
 
-1. Confuse other Claude Code sessions about active work
-2. Pollute stream discovery (agents think work is in progress when it's not)
-3. Cascade into incorrect merge operations
-4. Create phantom streams that block real work
+Using plan mode creates redundant, invisible-to-others files that:
+1. Confuse other Claude Code sessions about what's really in progress
+2. Pollute stream discovery (phantom work threads)
+3. Cascade into incorrect merge operations and blocked work
+4. Waste time creating documentation that already exists in stream files
 
-**The fix**: Use stream workflow directly. Skip plan mode for stream work. Delete plan files immediately after use.
+**The solution**: Never create plan files for stream work. The stream README/HANDOFF/STATUS files ARE your planning system.
 
 ---
 
