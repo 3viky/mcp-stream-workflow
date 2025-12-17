@@ -84,9 +84,14 @@ Developer mode: ENABLED (self-modification allowed)
 
 ### 1. Create Worktree (NEVER edit in main)
 
+**Recommended**: Use the `start_stream` MCP tool which creates worktrees in the correct XDG-compliant location.
+
+**Manual method** (uses WORKTREE_ROOT from config):
 ```bash
-git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement
-cd ../egirl-platform-worktrees/mcp-enhancement
+# Path will be: ~/.local/share/claude/mcp/data/stream-workflow/worktrees/<project>/mcp-enhancement
+# Or use the path from config.WORKTREE_ROOT if WORKTREE_ROOT env var is set
+git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement
+cd <WORKTREE_ROOT>/mcp-enhancement
 ```
 
 ### 2. Edit Source Files
@@ -261,9 +266,13 @@ export const config = {
   ANTHROPIC_MODEL: 'claude-sonnet-4-5-20250929',
   MAX_TOKENS: 8192,
 
-  // Paths
-  PROJECT_ROOT: process.env.PROJECT_ROOT || '/var/home/viky/Code/applications/src/@egirl/egirl-platform',
-  WORKTREE_ROOT: process.env.WORKTREE_ROOT || '/var/home/viky/Code/applications/src/@egirl/egirl-platform-worktrees',
+  // Paths (XDG-compliant by default)
+  PROJECT_ROOT: process.env.PROJECT_ROOT || '/path/to/your/project',
+  // WORKTREE_ROOT uses getMCPServiceDataDir() for XDG-compliant location:
+  // Linux: ~/.local/share/claude/mcp/data/stream-workflow/worktrees/<project>/
+  // macOS: ~/Library/Caches/mcp-services/stream-workflow-data/worktrees/<project>/
+  // Windows: %LOCALAPPDATA%/mcp-services/stream-workflow-data/worktrees/<project>/
+  WORKTREE_ROOT: process.env.WORKTREE_ROOT || getMCPServiceDataDir('stream-workflow') + '/worktrees/' + projectName,
 
   // Development mode
   DEVELOPER_MODE: process.env.DEVELOPER_MODE === 'true',

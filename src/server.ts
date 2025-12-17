@@ -62,7 +62,7 @@ function createMetadata(toolName: string): ResponseMetadata {
       updateInstructions: {
         summary: 'This MCP server is self-maintainable by Claude Code agents',
         workflow: [
-          '1. Create worktree: git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement',
+          `1. Create worktree: git worktree add ${config.WORKTREE_ROOT}/mcp-enhancement -b mcp-enhancement`,
           '2. Edit source files in .claude/mcp-servers/stream-workflow-manager/src/',
           '3. Test: pnpm test',
           '4. Build: pnpm build',

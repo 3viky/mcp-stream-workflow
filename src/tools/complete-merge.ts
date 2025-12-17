@@ -199,7 +199,7 @@ COMMON CAUSES:
 
 TO FIX:
 1. Go back to worktree:
-   cd ../egirl-platform-worktrees/${streamId}
+   cd ${config.WORKTREE_ROOT}/${streamId}
 
 2. Run prepare_merge again:
    prepare_merge({ streamId: "${streamId}" })

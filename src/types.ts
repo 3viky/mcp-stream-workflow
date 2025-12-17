@@ -429,9 +429,9 @@ export class WorktreeViolationError extends SelfDocumentingError {
       summary: 'All work must be done in worktrees, not main directory',
       files: ['.git-hooks/verify-worktree-location'],
       steps: [
-        'Create worktree: git worktree add ../egirl-platform-worktrees/stream-XX-name -b stream-XX-name',
-        'Navigate to worktree',
-        'Verify location: .git-hooks/verify-worktree-location',
+        'Use start_stream MCP tool to create a new stream with worktree',
+        'Navigate to the returned worktree path',
+        'Verify location with verify_location MCP tool',
       ],
       references: ['README.md#quick-update-workflow', 'CLAUDE.md#worktree-only-enforcement'],
       ...customInstructions,

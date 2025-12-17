@@ -188,7 +188,7 @@ const initResult = await mcp__stream-workflow__start_stream({
 });
 
 // Result: Creates metadata in main, creates worktree at stream-001
-// Location: ../egirl-platform-worktrees/stream-001
+// Location: <WORKTREE_ROOT>/stream-001 (XDG-compliant path from config)
 
 // Step 2: Work in the worktree...
 // (make changes, commit to branch)
@@ -221,7 +221,7 @@ const result = await mcp__stream-workflow__create_stream({
 });
 
 // Result: Creates worktree, branch, and stream tracking file
-// Location: ../egirl-platform-worktrees/stream-001
+// Location: <WORKTREE_ROOT>/stream-001 (XDG-compliant path from config)
 ```
 
 ### Merging Changes

@@ -28,8 +28,8 @@ The stream workflow requires all work to be done in worktrees:
   1. Create a stream:
      mcp__stream-workflow__start_stream
 
-  2. Work in the worktree:
-     cd ../egirl-platform-worktrees/stream-XXXX
+  2. Work in the worktree (path from config.WORKTREE_ROOT):
+     cd <WORKTREE_ROOT>/stream-XXXX
 
   3. Merge when ready:
      mcp__stream-workflow__prepare_merge

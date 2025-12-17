@@ -57,8 +57,8 @@ export const myTool: MCPToolHandler = async (args) => {
       updateInstructions: {
         summary: 'Create worktree, edit this file, test, merge',
         workflow: [
-          '1. git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement',
-          '2. cd .claude/mcp-servers/stream-workflow-manager',
+          '1. Use start_stream MCP tool, or: git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement',
+          '2. cd <WORKTREE_ROOT>/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager',
           '3. Edit src/tools/my-tool.ts',  // TODO: Update filename
           '4. pnpm test && pnpm build',
           '5. Restart Claude Code',

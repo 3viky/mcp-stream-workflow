@@ -172,7 +172,7 @@ interface StartStreamResponse {
      "status": "initializing",
      "createdAt": "2025-12-11T07:00:00Z",
      "branch": "stream-042-add-authentication",
-     "worktreePath": "../worktrees/stream-042-add-authentication",
+     "worktreePath": "<WORKTREE_ROOT>/stream-042-add-authentication",
      "phases": ["planning", "implementation", "testing"],
      "currentPhase": "planning",
      "tags": ["auth", "security"]
@@ -187,7 +187,7 @@ interface StartStreamResponse {
       - **Priority**: High
       - **Branch**: `stream-042-add-authentication`
       - **Created**: 2025-12-11
-      - **Worktree**: `../worktrees/stream-042-add-authentication`
+      - **Worktree**: `<WORKTREE_ROOT>/stream-042-add-authentication`
 
 11. Update .project/STREAM_STATE.json
     - Increment nextStreamId
@@ -211,7 +211,7 @@ interface StartStreamResponse {
     Category: backend
     Priority: high
     Branch: stream-042-add-authentication
-    Worktree: ../worktrees/stream-042-add-authentication
+    Worktree: <WORKTREE_ROOT>/stream-042-add-authentication
 
     This commit creates stream metadata in main before worktree creation.
     This is the ONLY operation that legitimately modifies main directly.
@@ -360,7 +360,7 @@ egirl-platform/                           # Main project (committed metadata)
 │               ├── STATUS.md            # Progress tracking
 │               └── METADATA.json        # Machine-readable metadata
 
-egirl-platform-worktrees/
+<WORKTREE_ROOT>/
 └── stream-042-add-authentication/       # Worktree (isolated development)
     ├── HANDOFF.md                       # Copy from main for convenience
     └── [... full project files ...]     # Ready for development

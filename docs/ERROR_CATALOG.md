@@ -27,17 +27,20 @@
 
 **Fix:**
 ```bash
-# 1. Create worktree for your work
-git worktree add ../egirl-platform-worktrees/stream-XX-name -b stream-XX-name
+# 1. Use start_stream MCP tool (recommended), or create worktree manually:
+git worktree add <WORKTREE_ROOT>/stream-XX-name -b stream-XX-name
 
 # 2. Navigate to worktree
-cd ../egirl-platform-worktrees/stream-XX-name
+cd <WORKTREE_ROOT>/stream-XX-name
 
-# 3. Verify location
-../../egirl-platform/.git-hooks/verify-worktree-location
+# 3. Verify location with MCP tool
+# Call verify_location MCP tool
 
 # 4. Retry operation
 ```
+
+**Note**: `<WORKTREE_ROOT>` is determined by `config.WORKTREE_ROOT`, which defaults to an XDG-compliant path:
+- Linux: `~/.local/share/claude/mcp/data/stream-workflow/worktrees/<project>/`
 
 **Files to update if this error is wrong:**
 - `.claude/mcp-servers/stream-workflow-manager/src/tools/verify-location.ts`
@@ -49,18 +52,19 @@ cd ../egirl-platform-worktrees/stream-XX-name
 
 **When it occurs**: Current directory doesn't match expected pattern
 
-**Expected pattern**: `/path/to/egirl-platform-worktrees/stream-*`
+**Expected pattern**: `<WORKTREE_ROOT>/stream-*` (path from config.WORKTREE_ROOT)
 
 **Fix:**
 ```bash
 # Check where you are
 pwd
 
-# If in wrong location:
-cd /var/home/viky/Code/applications/src/@egirl/egirl-platform-worktrees/stream-XX-name
+# Use get_active_context MCP tool to see expected location
+# Or navigate to correct worktree:
+cd <WORKTREE_ROOT>/stream-XX-name
 
-# Verify
-pwd  # Should show worktree path
+# Verify with MCP tool
+# Call verify_location
 ```
 
 **If pattern detection is wrong**, update:
@@ -435,13 +439,15 @@ Set in `.claude/mcp-servers.json`:
   "mcpServers": {
     "stream-workflow-manager": {
       "env": {
-        "PROJECT_ROOT": "/var/home/viky/Code/applications/src/@egirl/egirl-platform",
-        "WORKTREE_ROOT": "/var/home/viky/Code/applications/src/@egirl/egirl-platform-worktrees"
+        "PROJECT_ROOT": "/path/to/your/project"
       }
     }
   }
 }
 ```
+
+**Note**: `WORKTREE_ROOT` defaults to XDG-compliant location based on PROJECT_ROOT name.
+Only override if you need a custom worktree location.
 
 Or update `src/config.ts` defaults:
 ```typescript

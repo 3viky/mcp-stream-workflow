@@ -25,7 +25,8 @@ export async function verifyLocation(args: VerifyLocationArgs): Promise<MCPRespo
   };
 
   // Check 1: Is this the main directory?
-  if (workingDir === config.PROJECT_ROOT || workingDir.endsWith('/egirl-platform')) {
+  const projectName = config.PROJECT_ROOT.split('/').pop() || 'egirl-platform';
+  if (workingDir === config.PROJECT_ROOT || workingDir.endsWith(`/${projectName}`)) {
     response.isValid = false;
     response.error = 'WORKTREE_VIOLATION: Currently in main directory, not a worktree';
 
@@ -40,9 +41,10 @@ export async function verifyLocation(args: VerifyLocationArgs): Promise<MCPRespo
   }
 
   // Check 2: Is this in the worktrees directory?
-  if (!workingDir.includes('egirl-platform-worktrees')) {
+  // Use config.WORKTREE_ROOT to determine the expected worktree location
+  if (!workingDir.startsWith(config.WORKTREE_ROOT)) {
     response.isValid = false;
-    response.error = 'NOT_IN_WORKTREES: Directory is not in egirl-platform-worktrees';
+    response.error = `NOT_IN_WORKTREES: Directory is not in ${config.WORKTREE_ROOT}`;
 
     return {
       content: [
@@ -158,13 +160,14 @@ Status: BLOCKED - Cannot modify files in main directory
 All development work MUST be done in worktrees.
 
 TO FIX:
-1. Create worktree:
-   git worktree add ../egirl-platform-worktrees/stream-XX-name -b stream-XX-name
+1. Use start_stream tool to create a new stream with worktree, OR
+2. Create worktree manually:
+   git worktree add ${config.WORKTREE_ROOT}/stream-XX-name -b stream-XX-name
 
-2. Navigate to worktree:
-   cd ../egirl-platform-worktrees/stream-XX-name
+3. Navigate to worktree:
+   cd ${config.WORKTREE_ROOT}/stream-XX-name
 
-3. Verify location:
+4. Verify location:
    Call verify_location tool again
 
 WHY THIS EXISTS:

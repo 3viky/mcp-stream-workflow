@@ -411,11 +411,11 @@ git push origin main
 
 **Commands**:
 ```bash
-# Remove worktree
-git worktree remove ../egirl-platform-worktrees/stream-XX-name
+# Remove worktree (path from config.WORKTREE_ROOT)
+git worktree remove <WORKTREE_ROOT>/stream-XX-name
 
 # If worktree has uncommitted changes, force remove:
-git worktree remove --force ../egirl-platform-worktrees/stream-XX-name
+git worktree remove --force <WORKTREE_ROOT>/stream-XX-name
 
 # Delete local branch (optional, but recommended)
 git branch -d stream-XX-name

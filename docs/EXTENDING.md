@@ -21,10 +21,13 @@ This applies to:
 
 **To update this MCP server:**
 ```bash
-git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement
-cd ../egirl-platform-worktrees/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager
+# Use start_stream MCP tool (recommended), or manually:
+git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement
+cd <WORKTREE_ROOT>/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager
 # Make changes here
 ```
+
+**Note**: `<WORKTREE_ROOT>` is determined by `config.WORKTREE_ROOT` (XDG-compliant by default)
 
 ### 2. Conflict Resolution Happens in Worktrees
 
@@ -363,8 +366,8 @@ export const myTool: MCPToolHandler = async (args) => {
       updateInstructions: {
         summary: 'Create worktree, edit this file, test, merge',
         workflow: [
-          '1. git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement',
-          '2. cd .claude/mcp-servers/stream-workflow-manager',
+          '1. Use start_stream MCP tool, or: git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement',
+          '2. cd <WORKTREE_ROOT>/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager',
           '3. Edit src/tools/my-tool.ts',
           '4. pnpm test && pnpm build',
           '5. Restart Claude Code',
@@ -384,12 +387,13 @@ export const myTool: MCPToolHandler = async (args) => {
 
 1. **Create worktree** (NEVER work in main)
    ```bash
-   git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement
+   # Use start_stream MCP tool (recommended), or manually:
+   git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement
    ```
 
 2. **Navigate to MCP server in worktree**
    ```bash
-   cd ../egirl-platform-worktrees/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager
+   cd <WORKTREE_ROOT>/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager
    ```
 
 3. **Copy template and implement**
@@ -427,7 +431,7 @@ vim .claude/mcp-servers/stream-workflow-manager/src/server.ts  # WRONG!
 
 **ALWAYS:**
 ```bash
-cd /path/to/egirl-platform-worktrees/mcp-enhancement
+cd <WORKTREE_ROOT>/mcp-enhancement
 vim .claude/mcp-servers/stream-workflow-manager/src/server.ts  # CORRECT
 ```
 
@@ -442,7 +446,7 @@ git merge worktree-branch
 
 **ALWAYS:**
 ```bash
-cd /path/to/egirl-platform-worktrees/stream-XX  # Worktree
+cd <WORKTREE_ROOT>/stream-XX  # Worktree
 git merge main
 # Conflicts! Resolve them here? YES!
 ```

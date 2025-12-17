@@ -186,7 +186,7 @@ class ConfigMergeStrategy implements ConflictStrategy {
       "id": 12,
       "title": "Escrow Service Implementation",
       "status": "active",
-      "worktreePath": "/var/home/.../egirl-platform-worktrees/stream-12-escrow",
+      "worktreePath": "<WORKTREE_ROOT>/stream-12-escrow",
       "branch": "stream-12-escrow",
       "createdAt": "2025-12-10T14:00:00Z",
       "phases": 4,
@@ -337,9 +337,9 @@ StateManager.withLock(async () => {
   // 1. Assign next stream ID (atomic)
   const streamId = state.nextStreamId++;  // 12
 
-  // 2. Create worktree
+  // 2. Create worktree (path from config.WORKTREE_ROOT)
   await git.worktree.add(
-    '../egirl-platform-worktrees/stream-12-escrow',
+    `${config.WORKTREE_ROOT}/stream-12-escrow`,
     '-b', 'stream-12-escrow'
   );
 
@@ -510,8 +510,8 @@ Every tool response includes:
     updateInstructions: {
       summary: 'Create worktree, edit source, test, merge',
       workflow: [
-        '1. git worktree add ../egirl-platform-worktrees/mcp-enhancement -b mcp-enhancement',
-        '2. cd ../egirl-platform-worktrees/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager',
+        '1. Use start_stream MCP tool, or: git worktree add <WORKTREE_ROOT>/mcp-enhancement -b mcp-enhancement',
+        '2. cd <WORKTREE_ROOT>/mcp-enhancement/.claude/mcp-servers/stream-workflow-manager',
         '3. Edit files, run tests (pnpm test), build (pnpm build)',
         '4. Restart Claude Code session',
         '5. Merge to main'

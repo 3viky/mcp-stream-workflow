@@ -37,8 +37,7 @@ The MCP server configuration will be in `.claude/mcp-servers.json`.
         ".claude/mcp-servers/stream-workflow-manager/dist/server.js"
       ],
       "env": {
-        "PROJECT_ROOT": "/var/home/viky/Code/applications/src/@egirl/egirl-platform",
-        "WORKTREE_ROOT": "/var/home/viky/Code/applications/src/@egirl/egirl-platform-worktrees",
+        "PROJECT_ROOT": "/path/to/your/project",
         "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
       },
       "metadata": {
