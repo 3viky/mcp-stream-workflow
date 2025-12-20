@@ -96,7 +96,7 @@ export async function acquireGitLock(
       // Atomically push lock branch to origin
       // This will fail if another agent pushed first (race condition protection)
       try {
-        await git.push(['origin', LOCK_BRANCH, '--force']);
+        await git.push(['origin', LOCK_BRANCH.replace('refs/', ''), '--force']);
         console.error(`[git-lock] Lock acquired on attempt ${attempt + 1}`);
 
         // Switch back to previous branch
