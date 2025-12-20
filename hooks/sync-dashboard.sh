@@ -2,16 +2,16 @@
 #
 # Dashboard Sync Script
 #
-# Purpose: Update STATUS_DASHBOARD.md with current stream progress
+# Purpose: Submit commit data to stream-workflow-status dashboard API
 # Called by: post-commit hook (every 3-5 commits)
 # Runs in: Background (non-blocking)
 #
 # This script:
-# 1. Collects current stream progress (commits, files, latest message)
-# 2. Switches to main project directory
-# 3. Updates STATUS_DASHBOARD.md with new progress info
-# 4. Commits the dashboard update with --no-verify (bypasses pre-commit hook)
-# 5. Returns to worktree
+# 1. Collects current commit information
+# 2. Posts commit data to dashboard API (POST /api/commits)
+# 3. Dashboard updates in real-time via SQLite database
+#
+# NO GIT COMMITS TO MAIN - uses HTTP API instead
 #
 
 set -e
@@ -24,169 +24,79 @@ WORKTREE_DIR="$(git rev-parse --show-toplevel)"
 STREAM_ID="$(basename "$WORKTREE_DIR")"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-# Get PROJECT_ROOT from git config
-PROJECT_ROOT="$(git config --get stream-workflow.project-root || echo "")"
-
-if [ -z "$PROJECT_ROOT" ]; then
-  echo "[sync-dashboard] Error: PROJECT_ROOT not configured"
-  echo "[sync-dashboard] Run: git config stream-workflow.project-root /path/to/main"
-  exit 1
-fi
-
-DASHBOARD="${PROJECT_ROOT}/.project/STREAM_STATUS_DASHBOARD.md"
+# Get API port from git config (default: 3001)
+API_PORT="$(git config --get stream-workflow.api-port || echo "3001")"
+API_URL="http://localhost:${API_PORT}/api/commits"
 
 # ============================================================================
-# Collect Progress Information
+# Collect Commit Information
 # ============================================================================
 
-echo "[sync-dashboard] Collecting progress for ${STREAM_ID}..."
+echo "[sync-dashboard] Collecting commit information for ${STREAM_ID}..."
 
-# Total commits on this branch
-COMMIT_COUNT="$(git rev-list --count HEAD)"
+# Latest commit (full hash for API)
+COMMIT_HASH="$(git log -1 --format='%H')"
+COMMIT_SHORT="$(git log -1 --format='%h')"
+COMMIT_MSG="$(git log -1 --format='%s')"
+COMMIT_AUTHOR="$(git log -1 --format='%an <%ae>')"
 
-# Latest commit
-LATEST_COMMIT_HASH="$(git log -1 --format='%h')"
-LATEST_COMMIT_MSG="$(git log -1 --format='%s')"
+# Files changed in this commit
+FILES_CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l)"
 
-# Files changed in last 5 commits
-CHANGED_FILES="$(git diff --name-only HEAD~5..HEAD 2>/dev/null | wc -l || echo "0")"
+# ISO 8601 timestamp
+TIMESTAMP="$(git log -1 --format='%aI')"
 
-# Current timestamp
-TIMESTAMP="$(date '+%Y-%m-%d %H:%M')"
-
-echo "[sync-dashboard] Progress: ${COMMIT_COUNT} commits, ${CHANGED_FILES} files changed"
-echo "[sync-dashboard] Latest: ${LATEST_COMMIT_HASH} ${LATEST_COMMIT_MSG}"
+echo "[sync-dashboard] Commit: ${COMMIT_SHORT} ${COMMIT_MSG}"
+echo "[sync-dashboard] Author: ${COMMIT_AUTHOR}"
+echo "[sync-dashboard] Files changed: ${FILES_CHANGED}"
 
 # ============================================================================
-# Update Dashboard
+# Submit Commit to Dashboard API
 # ============================================================================
 
-echo "[sync-dashboard] Updating dashboard in main project..."
+echo "[sync-dashboard] Submitting commit to dashboard API..."
 
-cd "$PROJECT_ROOT"
-
-# Check if dashboard exists
-if [ ! -f "$DASHBOARD" ]; then
-  echo "[sync-dashboard] Warning: Dashboard not found at ${DASHBOARD}"
-  echo "[sync-dashboard] Creating new dashboard..."
-  mkdir -p "$(dirname "$DASHBOARD")"
-  cat > "$DASHBOARD" << 'EOF'
-# Stream Status Dashboard
-
-**Last Updated**: Auto-synced
-
-## Active Streams
-
-No active streams yet.
+# Build JSON payload
+JSON_PAYLOAD=$(cat <<EOF
+{
+  "streamId": "${STREAM_ID}",
+  "commitHash": "${COMMIT_HASH}",
+  "message": "${COMMIT_MSG}",
+  "author": "${COMMIT_AUTHOR}",
+  "filesChanged": ${FILES_CHANGED},
+  "timestamp": "${TIMESTAMP}"
+}
 EOF
-fi
+)
 
-# Update dashboard using Python for robust parsing
-python3 << PYTHON_SCRIPT
-import re
-import sys
-from datetime import datetime
+# POST to API
+HTTP_CODE=$(curl -s -o /tmp/sync-dashboard-response.txt -w "%{http_code}" \
+  -X POST "${API_URL}" \
+  -H "Content-Type: application/json" \
+  -d "${JSON_PAYLOAD}")
 
-dashboard_path = "${DASHBOARD}"
-stream_id = "${STREAM_ID}"
-commit_count = "${COMMIT_COUNT}"
-latest_hash = "${LATEST_COMMIT_HASH}"
-latest_msg = "${LATEST_COMMIT_MSG}"
-changed_files = "${CHANGED_FILES}"
-timestamp = "${TIMESTAMP}"
-
-try:
-    with open(dashboard_path, 'r') as f:
-        content = f.read()
-
-    # Find stream section
-    pattern = rf"## {re.escape(stream_id)}.*?(?=\n##|\Z)"
-    match = re.search(pattern, content, re.DOTALL)
-
-    if match:
-        # Update existing stream section
-        old_section = match.group(0)
-
-        # Update Last Updated timestamp
-        new_section = re.sub(
-            r'\*\*Last Updated\*\*:.*',
-            f"**Last Updated**: {timestamp} (auto-synced)",
-            old_section
-        )
-
-        # Update or add Progress section
-        if "**Progress**:" in new_section:
-            # Replace existing progress
-            new_section = re.sub(
-                r'\*\*Progress\*\*:.*?(?=\n\*\*|\n\n|\Z)',
-                f"""**Progress**:
-- Commits: {commit_count}
-- Files changed: {changed_files}
-- Latest: \`{latest_hash} {latest_msg}\`
-""",
-                new_section,
-                flags=re.DOTALL
-            )
-        else:
-            # Add progress section after Last Updated
-            new_section = re.sub(
-                r'(\*\*Last Updated\*\*:.*\n)',
-                rf'\1\n**Progress**:\n- Commits: {commit_count}\n- Files changed: {changed_files}\n- Latest: `{latest_hash} {latest_msg}`\n',
-                new_section
-            )
-
-        content = content.replace(old_section, new_section)
-    else:
-        print(f"[sync-dashboard] Warning: Stream {stream_id} not found in dashboard", file=sys.stderr)
-        print(f"[sync-dashboard] Dashboard may need manual update", file=sys.stderr)
-
-    # Write updated dashboard
-    with open(dashboard_path, 'w') as f:
-        f.write(content)
-
-    print(f"[sync-dashboard] Dashboard updated successfully", file=sys.stderr)
-    sys.exit(0)
-
-except Exception as e:
-    print(f"[sync-dashboard] Error updating dashboard: {e}", file=sys.stderr)
-    sys.exit(1)
-
-PYTHON_SCRIPT
-
-# Check if update succeeded
-if [ $? -ne 0 ]; then
-  echo "[sync-dashboard] Failed to update dashboard"
+# Check response
+if [ "$HTTP_CODE" -eq 201 ]; then
+  echo "[sync-dashboard] ✅ Commit submitted successfully (HTTP $HTTP_CODE)"
+  echo "[sync-dashboard] Dashboard updated via API - no git commits to main"
+elif [ "$HTTP_CODE" -eq 404 ]; then
+  echo "[sync-dashboard] ⚠️  Stream not found in database (HTTP $HTTP_CODE)"
+  echo "[sync-dashboard] Response: $(cat /tmp/sync-dashboard-response.txt)"
+  echo "[sync-dashboard] Stream may need to be registered first"
+  exit 1
+elif [ "$HTTP_CODE" -eq 000 ]; then
+  echo "[sync-dashboard] ⚠️  API server not reachable at ${API_URL}"
+  echo "[sync-dashboard] Ensure mcp-stream-workflow-status is running"
+  echo "[sync-dashboard] Check: curl ${API_URL%/commits}/stats"
+  exit 1
+else
+  echo "[sync-dashboard] ⚠️  API request failed (HTTP $HTTP_CODE)"
+  echo "[sync-dashboard] Response: $(cat /tmp/sync-dashboard-response.txt)"
   exit 1
 fi
 
-# ============================================================================
-# Commit Dashboard Update
-# ============================================================================
-
-echo "[sync-dashboard] Committing dashboard update..."
-
-# Check if there are changes
-if git diff --quiet "$DASHBOARD"; then
-  echo "[sync-dashboard] No changes to commit"
-  exit 0
-fi
-
-# Commit with --no-verify to bypass pre-commit hook
-# (pre-commit hook blocks commits in main, but dashboard updates are allowed)
-git add "$DASHBOARD"
-git commit --no-verify -m "chore: Update stream status [${STREAM_ID}]
-
-Commits: ${COMMIT_COUNT}
-Latest: ${LATEST_COMMIT_HASH} ${LATEST_COMMIT_MSG}
-Files changed: ${CHANGED_FILES}
-
-🤖 Auto-synced by post-commit hook" > /dev/null 2>&1
-
-if [ $? -eq 0 ]; then
-  echo "[sync-dashboard] ✅ Dashboard committed successfully"
-else
-  echo "[sync-dashboard] ⚠️  Failed to commit dashboard (non-fatal)"
-fi
+# Cleanup
+rm -f /tmp/sync-dashboard-response.txt
 
 echo "[sync-dashboard] Sync complete"
 exit 0

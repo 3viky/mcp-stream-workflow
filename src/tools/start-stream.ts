@@ -1,19 +1,26 @@
 /**
  * start_stream - Initialize New Development Stream
  *
- * This is the ONLY tool that legitimately runs in main directory and modifies main.
- * All other tools MUST run in worktrees.
+ * WORKTREE-FIRST ARCHITECTURE (v0.3.0+)
+ * This tool runs in main directory but makes ZERO commits to main.
+ * All stream metadata lives in the worktree.
  *
  * WORKFLOW:
  * 1. Validation - Verify clean main, on main branch, up-to-date with origin
  * 2. Generate Stream ID - Use state-manager for monotonic IDs, slugify title
- * 3. Create Metadata Files - HANDOFF.md, README.md, STATUS.md, METADATA.json
- * 4. Update Dashboard & State - Add to STATUS_DASHBOARD.md and STREAM_STATE.json
- * 5. Git Commit - Commit metadata to main with standardized message
- * 6. Create Worktree - Create worktree with new branch
- * 7. Return Response - Provide path and next steps
+ * 3. Update State - Register in .stream-state.json (local file, not committed)
+ * 4. Create Worktree - Create worktree with new branch from main
+ * 5. Create Docset in Worktree - HANDOFF.md, README.md, STATUS.md, METADATA.json
+ * 6. First Commit in Worktree - Commit docset files (stream's first commit)
+ * 7. Install Hooks - Auto-install post-commit hooks for dashboard sync
+ * 8. Register with Dashboard - Call API to register stream in database
+ * 9. Return Response - Provide path and next steps
  *
- * Implementation of Phase 4 from IMPLEMENTATION_PLAN.md
+ * KEY CHANGES FROM v0.2.0:
+ * - NO commits to main (was: committed metadata to main before worktree)
+ * - Stream docset is first commit in worktree (was: copied HANDOFF.md after worktree)
+ * - Dashboard registration via API (was: git commit to STATUS_DASHBOARD.md)
+ * - Hooks auto-installed (was: manual setup required)
  *
  * @module tools/start-stream
  */
@@ -23,8 +30,9 @@ import {
   mkdirSync,
   writeFileSync,
   copyFileSync,
+  chmodSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 
 import { config } from '../config.js';
@@ -43,11 +51,13 @@ interface StartStreamResponse {
   streamNumber: string;
   worktreePath: string;
   branchName: string;
-  metadata: {
-    planDir: string;
+  worktreeCommit: {
+    hash: string;
+    message: string;
     filesCreated: string[];
-    commitHash: string;
   };
+  hooksInstalled: boolean;
+  dashboardRegistered: boolean;
   nextSteps: string[];
   handoffPath: string;
 }
@@ -164,38 +174,66 @@ async function generateStreamId(
 }
 
 // ============================================================================
-// Phase 3: Create Metadata Files
+// Phase 3: Create Worktree
 // ============================================================================
 
 /**
- * Create all stream metadata files in .project/plan/streams/{streamId}/
+ * Create git worktree for stream development
  *
- * Files created:
+ * Creates worktree at {WORKTREE_ROOT}/{streamId} with new branch {streamId}.
+ * This happens BEFORE creating any metadata files.
+ *
+ * @param streamId Stream identifier
+ * @returns Absolute path to worktree
+ */
+async function createWorktree(streamId: string): Promise<string> {
+  const worktreePath = join(config.WORKTREE_ROOT, streamId);
+  const git: SimpleGit = simpleGit(config.PROJECT_ROOT);
+
+  // Ensure worktree root directory exists
+  const worktreeRoot = config.WORKTREE_ROOT;
+  if (!existsSync(worktreeRoot)) {
+    mkdirSync(worktreeRoot, { recursive: true });
+  }
+
+  // Create worktree with new branch
+  // Command: git worktree add <path> -b <branch>
+  await git.raw(['worktree', 'add', worktreePath, '-b', streamId]);
+
+  return worktreePath;
+}
+
+// ============================================================================
+// Phase 4: Create Docset in Worktree
+// ============================================================================
+
+/**
+ * Create stream docset files IN the worktree
+ *
+ * Files created in worktree root:
  * - HANDOFF.md - Agent instructions for what to work on
  * - README.md - Stream overview and timeline
  * - STATUS.md - Current progress and phase tracking
  * - METADATA.json - Machine-readable stream metadata
  *
+ * These files will be the FIRST commit in the worktree branch.
+ *
+ * @param worktreePath Absolute path to worktree
  * @param args User-provided stream parameters
  * @param streamInfo Generated stream ID and number
- * @returns Array of created file paths (absolute)
+ * @returns Array of created file paths (relative to worktree)
  */
-async function createMetadataFiles(
+async function createDocsetInWorktree(
+  worktreePath: string,
   args: StartStreamArgs,
   streamInfo: { streamId: string; streamNumber: string }
 ): Promise<string[]> {
   const { streamId, streamNumber } = streamInfo;
-  const streamDir = join(config.PROJECT_ROOT, '.project/plan/streams', streamId);
-
-  // Create stream directory
-  mkdirSync(streamDir, { recursive: true });
-
   const filesCreated: string[] = [];
   const timestamp = new Date().toISOString();
-  const worktreePath = join(config.WORKTREE_ROOT, streamId);
 
   // 1. HANDOFF.md - Agent instructions
-  const handoffPath = join(streamDir, 'HANDOFF.md');
+  const handoffPath = join(worktreePath, 'HANDOFF.md');
   const handoffContent = renderTemplate('HANDOFF.template.md', {
     STREAM_TITLE: args.title,
     STREAM_ID: streamId,
@@ -208,10 +246,10 @@ async function createMetadataFiles(
     PROJECT_ROOT: config.PROJECT_ROOT,
   });
   writeFileSync(handoffPath, handoffContent, 'utf-8');
-  filesCreated.push(handoffPath);
+  filesCreated.push('HANDOFF.md');
 
   // 2. README.md - Stream overview
-  const readmePath = join(streamDir, 'README.md');
+  const readmePath = join(worktreePath, 'README.md');
   const phases = (args.estimatedPhases || []).map((phase) => ({ PHASE_NAME: phase }));
   const readmeContent = renderTemplate('README.template.md', {
     STREAM_TITLE: args.title,
@@ -228,10 +266,10 @@ async function createMetadataFiles(
     PHASES: phases,
   });
   writeFileSync(readmePath, readmeContent, 'utf-8');
-  filesCreated.push(readmePath);
+  filesCreated.push('README.md');
 
   // 3. STATUS.md - Progress tracking
-  const statusPath = join(streamDir, 'STATUS.md');
+  const statusPath = join(worktreePath, 'STATUS.md');
   const statusContent = renderTemplate('STATUS.template.md', {
     STREAM_ID: streamId,
     UPDATED_AT: timestamp,
@@ -241,10 +279,10 @@ async function createMetadataFiles(
     NOTES: '',
   });
   writeFileSync(statusPath, statusContent, 'utf-8');
-  filesCreated.push(statusPath);
+  filesCreated.push('STATUS.md');
 
   // 4. METADATA.json - Machine-readable metadata
-  const metadataPath = join(streamDir, 'METADATA.json');
+  const metadataPath = join(worktreePath, 'METADATA.json');
   const metadata = {
     streamId,
     streamNumber,
@@ -264,13 +302,184 @@ async function createMetadataFiles(
     blockedReason: null,
   };
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
-  filesCreated.push(metadataPath);
+  filesCreated.push('METADATA.json');
 
   return filesCreated;
 }
 
 // ============================================================================
-// Phase 4: Update State
+// Phase 5: First Commit in Worktree
+// ============================================================================
+
+/**
+ * Create first commit in worktree with stream docset files
+ *
+ * This commit contains only the stream metadata files (HANDOFF.md, README.md,
+ * STATUS.md, METADATA.json). It serves as the stream's initialization commit
+ * and establishes the worktree's independent history.
+ *
+ * @param worktreePath Absolute path to worktree
+ * @param streamId Stream identifier
+ * @param streamInfo Stream ID and number
+ * @param filesCreated Array of file paths to commit
+ * @returns Commit hash
+ */
+async function commitDocsetInWorktree(
+  worktreePath: string,
+  streamId: string,
+  streamInfo: { streamId: string; streamNumber: string },
+  filesCreated: string[],
+  args: StartStreamArgs
+): Promise<string> {
+  const git: SimpleGit = simpleGit(worktreePath);
+
+  // Stage all docset files
+  await git.add(filesCreated);
+
+  // Create commit with standardized message
+  const commitMessage = `chore(${streamId}): initialize stream docset - ${args.title}
+
+Stream initialization by MCP Stream Workflow Manager
+
+Category: ${args.category}
+Priority: ${args.priority}
+Stream Number: ${streamInfo.streamNumber}
+Worktree: ${worktreePath}
+
+This is the FIRST commit in the ${streamId} worktree branch.
+It contains the stream docset that guides development work.
+
+Docset files:
+${filesCreated.map((f) => '- ' + f).join('\n')}
+
+All development work will follow this initialization commit.
+`;
+
+  await git.commit(commitMessage);
+
+  // Get commit hash
+  const log = await git.log({ maxCount: 1 });
+  return log.latest?.hash || '';
+}
+
+// ============================================================================
+// Phase 6: Install Hooks
+// ============================================================================
+
+/**
+ * Install post-commit hooks in worktree for automatic dashboard sync
+ *
+ * Copies hooks from mcp-stream-workflow/hooks/ to worktree/.git/hooks/
+ * and makes them executable. Also configures git config for hook operation.
+ *
+ * @param worktreePath Absolute path to worktree
+ * @returns true if hooks installed successfully
+ */
+async function installHooks(worktreePath: string): Promise<boolean> {
+  try {
+    // Hooks are in the mcp-stream-workflow package directory
+    const mcpPackageDir = dirname(dirname(dirname(__filename))); // src/tools/start-stream.ts -> src -> mcp-stream-workflow
+    const hooksSourceDir = join(mcpPackageDir, 'hooks');
+    const hooksDestDir = join(worktreePath, '.git', 'hooks');
+
+    // Ensure hooks destination exists
+    if (!existsSync(hooksDestDir)) {
+      mkdirSync(hooksDestDir, { recursive: true });
+    }
+
+    // Copy post-commit hook
+    const postCommitSource = join(hooksSourceDir, 'post-commit');
+    const postCommitDest = join(hooksDestDir, 'post-commit');
+
+    if (!existsSync(postCommitSource)) {
+      console.error(`[start-stream] Warning: post-commit hook not found at ${postCommitSource}`);
+      return false;
+    }
+
+    copyFileSync(postCommitSource, postCommitDest);
+    chmodSync(postCommitDest, 0o755); // Make executable
+
+    // Copy sync-dashboard.sh
+    const syncDashboardSource = join(hooksSourceDir, 'sync-dashboard.sh');
+    const syncDashboardDest = join(hooksDestDir, 'sync-dashboard.sh');
+
+    if (existsSync(syncDashboardSource)) {
+      copyFileSync(syncDashboardSource, syncDashboardDest);
+      chmodSync(syncDashboardDest, 0o755); // Make executable
+    }
+
+    // Configure git for hook operation
+    const git: SimpleGit = simpleGit(worktreePath);
+    await git.addConfig('stream-workflow.project-root', config.PROJECT_ROOT);
+    await git.addConfig('stream-workflow.sync-threshold', '3'); // Sync every 3 commits
+    await git.addConfig('stream-workflow.api-port', process.env.API_PORT || '3001');
+
+    console.error(`[start-stream] ✅ Hooks installed in worktree .git/hooks/`);
+    return true;
+  } catch (error) {
+    console.error(`[start-stream] ⚠️  Failed to install hooks:`, error);
+    return false;
+  }
+}
+
+// ============================================================================
+// Phase 7: Register with Dashboard
+// ============================================================================
+
+/**
+ * Register new stream with dashboard via API
+ *
+ * Calls POST /api/streams (or uses add_stream MCP tool) to register the
+ * stream in the dashboard database for real-time tracking.
+ *
+ * @param args Stream parameters
+ * @param streamInfo Stream ID and number
+ * @param worktreePath Absolute path to worktree
+ * @returns true if registered successfully
+ */
+async function registerStreamWithDashboard(
+  args: StartStreamArgs,
+  streamInfo: { streamId: string; streamNumber: string },
+  worktreePath: string
+): Promise<boolean> {
+  try {
+    const apiPort = process.env.API_PORT || '3001';
+    const apiUrl = `http://localhost:${apiPort}/api/streams`;
+
+    const payload = {
+      streamId: streamInfo.streamId,
+      streamNumber: streamInfo.streamNumber,
+      title: args.title,
+      category: args.category,
+      priority: args.priority,
+      worktreePath,
+      branch: streamInfo.streamId,
+      estimatedPhases: args.estimatedPhases || [],
+    };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      console.error(`[start-stream] ✅ Stream registered with dashboard (HTTP ${response.status})`);
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error(`[start-stream] ⚠️  Dashboard registration failed (HTTP ${response.status}): ${errorText}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`[start-stream] ⚠️  Dashboard registration failed:`, error);
+    console.error(`[start-stream] Dashboard may not be running. Stream will work but won't appear in dashboard.`);
+    return false;
+  }
+}
+
+// ============================================================================
+// Phase 8: Update State
 // ============================================================================
 
 /**
@@ -308,131 +517,7 @@ async function updateState(
 }
 
 // ============================================================================
-// Phase 5: Git Commit
-// ============================================================================
-
-/**
- * Commit stream metadata to main branch
- *
- * Commit message format (conventional commits):
- * ```
- * chore({streamId}): initialize stream - {title}
- *
- * Stream initialization by MCP Stream Workflow Manager
- *
- * Category: {category}
- * Priority: {priority}
- * Branch: {streamId}
- * Worktree: {worktreePath}
- *
- * This commit creates stream metadata in main before worktree creation.
- * This is the ONLY operation that legitimately modifies main directly.
- * All development work will occur in the worktree.
- *
- * Metadata files:
- * - .project/plan/streams/{streamId}/HANDOFF.md
- * - .project/plan/streams/{streamId}/README.md
- * - .project/plan/streams/{streamId}/STATUS.md
- * - .project/plan/streams/{streamId}/METADATA.json
- * ```
- *
- * @param args User-provided stream parameters
- * @param streamInfo Generated stream ID and number
- * @param filesCreated Array of created file paths
- * @returns Commit hash
- */
-async function commitMetadata(
-  args: StartStreamArgs,
-  streamInfo: { streamId: string; streamNumber: string },
-  filesCreated: string[]
-): Promise<string> {
-  const { streamId } = streamInfo;
-  const git: SimpleGit = simpleGit(config.PROJECT_ROOT);
-  const worktreePath = join(config.WORKTREE_ROOT, streamId);
-
-  // Stage all metadata files
-  await git.add(`.project/plan/streams/${streamId}`);
-  await git.add('.project/.stream-state.json');
-
-  // Create commit with standardized message (conventional commits format)
-  const fileList = filesCreated
-    .map((f) => '- ' + f.replace(config.PROJECT_ROOT, '.'))
-    .join('\n');
-
-  const commitMessage = `chore(${streamId}): initialize stream - ${args.title}
-
-Stream initialization by MCP Stream Workflow Manager
-
-Category: ${args.category}
-Priority: ${args.priority}
-Branch: ${streamId}
-Worktree: ${worktreePath}
-
-This commit creates stream metadata in main before worktree creation.
-This is the ONLY operation that legitimately modifies main directly.
-All development work will occur in the worktree.
-
-Metadata files:
-${fileList}
-`;
-
-  await git.commit(commitMessage);
-
-  // Push to origin (if remote exists)
-  try {
-    await git.push('origin', 'main');
-  } catch (error) {
-    // Push might fail if no remote exists (local-only repo)
-    console.error('[start-stream] Warning: Could not push to origin:', error);
-  }
-
-  // Get commit hash
-  const log = await git.log({ maxCount: 1 });
-  return log.latest?.hash || '';
-}
-
-// ============================================================================
-// Phase 6: Create Worktree
-// ============================================================================
-
-/**
- * Create git worktree for stream development
- *
- * Creates worktree at {WORKTREE_ROOT}/{streamId} with new branch {streamId}.
- * Copies HANDOFF.md to worktree root for easy agent access.
- *
- * @param streamId Stream identifier
- * @returns Absolute path to worktree
- */
-async function createWorktree(streamId: string): Promise<string> {
-  const worktreePath = join(config.WORKTREE_ROOT, streamId);
-  const git: SimpleGit = simpleGit(config.PROJECT_ROOT);
-
-  // Ensure worktree root directory exists
-  const worktreeRoot = config.WORKTREE_ROOT;
-  if (!existsSync(worktreeRoot)) {
-    mkdirSync(worktreeRoot, { recursive: true });
-  }
-
-  // Create worktree with new branch
-  // Command: git worktree add <path> -b <branch>
-  await git.raw(['worktree', 'add', worktreePath, '-b', streamId]);
-
-  // Copy HANDOFF.md to worktree root for easy access
-  const handoffSource = join(
-    config.PROJECT_ROOT,
-    '.project/plan/streams',
-    streamId,
-    'HANDOFF.md'
-  );
-  const handoffDest = join(worktreePath, 'HANDOFF.md');
-  copyFileSync(handoffSource, handoffDest);
-
-  return worktreePath;
-}
-
-// ============================================================================
-// Phase 7: Format Response
+// Phase 9: Format Response
 // ============================================================================
 
 /**
@@ -442,8 +527,11 @@ async function createWorktree(streamId: string): Promise<string> {
  * @returns Formatted response string
  */
 function formatSuccessResponse(response: StartStreamResponse): string {
-  const { streamId, streamNumber, worktreePath, branchName, metadata, handoffPath } =
+  const { streamId, streamNumber, worktreePath, branchName, worktreeCommit, hooksInstalled, dashboardRegistered, handoffPath } =
     response;
+
+  const hookStatus = hooksInstalled ? '✅ Installed' : '⚠️  Not installed';
+  const dashboardStatus = dashboardRegistered ? '✅ Registered' : '⚠️  Not registered';
 
   return `✅ Stream initialized successfully!
 
@@ -454,13 +542,23 @@ Stream Number:  ${streamNumber}
 Branch:         ${branchName}
 Worktree Path:  ${worktreePath}
 
-METADATA CREATED
+WORKTREE INITIALIZATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Plan Directory: ${metadata.planDir}
-Files Created:
-${metadata.filesCreated.map((f) => `  - ${f}`).join('\n')}
+First Commit:   ${worktreeCommit.hash.substring(0, 8)} - ${worktreeCommit.message}
+Docset Files:
+${worktreeCommit.filesCreated.map((f) => `  - ${f}`).join('\n')}
 
-Committed to main: ${metadata.commitHash.substring(0, 8)}
+AUTOMATION STATUS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Post-commit hooks:  ${hookStatus}
+Dashboard tracking: ${dashboardStatus}
+
+KEY CHANGES (v0.3.0+)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ NO commits to main (stream docset lives in worktree)
+✅ Docset is FIRST commit in worktree branch
+✅ Hooks auto-installed for dashboard sync via API
+✅ Dashboard updates via HTTP API (no git commits)
 
 NEXT STEPS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -481,16 +579,18 @@ The stream is ready for development. Navigate to the worktree and begin work.
 /**
  * start_stream - Initialize new development stream
  *
- * RUNS IN MAIN (only legitimate exception to worktree-only rule)
+ * RUNS IN MAIN but makes ZERO commits to main (v0.3.0+)
  *
- * This tool orchestrates the complete stream initialization workflow:
+ * This tool orchestrates the complete worktree-first stream initialization:
  * 1. Validates environment (clean main, up-to-date)
  * 2. Generates unique stream ID
- * 3. Creates metadata files in main
- * 4. Updates dashboard and state
- * 5. Commits metadata to main
- * 6. Creates worktree for development
- * 7. Returns path and next steps
+ * 3. Updates state registry (local file, not committed)
+ * 4. Creates worktree with new branch
+ * 5. Creates docset files IN worktree
+ * 6. Makes FIRST commit in worktree with docset
+ * 7. Installs post-commit hooks for dashboard sync
+ * 8. Registers stream with dashboard via API
+ * 9. Returns path and next steps
  *
  * @param args Stream parameters (title, category, priority, handoff, etc.)
  * @returns MCP response with stream details and next steps
@@ -515,37 +615,56 @@ export async function startStream(args: StartStreamArgs): Promise<MCPResponse> {
     const streamInfo = await generateStreamId(args.title, args.subStreamOf);
     const { streamId, streamNumber } = streamInfo;
 
-    // Phase 3: Create metadata files
-    const filesCreated = await createMetadataFiles(args, streamInfo);
-
-    // Phase 4: Update state
+    // Phase 3: Update state (local registry, not committed to git)
     await updateState(args, streamInfo);
 
-    // Phase 5: Commit metadata to main
-    const commitHash = await commitMetadata(args, streamInfo, filesCreated);
-
-    // Phase 6: Create worktree
+    // Phase 4: Create worktree
     const worktreePath = await createWorktree(streamId);
 
-    // Phase 6.5: Set active stream context (for post-compaction recovery)
+    // Phase 5: Create docset files in worktree
+    const filesCreated = await createDocsetInWorktree(worktreePath, args, streamInfo);
+
+    // Phase 6: First commit in worktree (docset files)
+    const commitHash = await commitDocsetInWorktree(
+      worktreePath,
+      streamId,
+      streamInfo,
+      filesCreated,
+      args
+    );
+
+    // Phase 7: Install post-commit hooks
+    const hooksInstalled = await installHooks(worktreePath);
+
+    // Phase 8: Register with dashboard API
+    const dashboardRegistered = await registerStreamWithDashboard(
+      args,
+      streamInfo,
+      worktreePath
+    );
+
+    // Phase 9: Set active stream context (for post-compaction recovery)
     await setActiveStream({
       streamId,
       worktreePath,
       lastAccessedAt: new Date().toISOString(),
     });
 
-    // Phase 7: Format response
+    // Phase 10: Format response
+    const commitMessage = `chore(${streamId}): initialize stream docset - ${args.title}`;
     const response: StartStreamResponse = {
       success: true,
       streamId,
       streamNumber,
       worktreePath,
       branchName: streamId,
-      metadata: {
-        planDir: `.project/plan/streams/${streamId}`,
-        filesCreated: filesCreated.map((f) => f.replace(config.PROJECT_ROOT, '.')),
-        commitHash,
+      worktreeCommit: {
+        hash: commitHash,
+        message: commitMessage,
+        filesCreated,
       },
+      hooksInstalled,
+      dashboardRegistered,
       nextSteps: [
         `Navigate to worktree: cd ${worktreePath}`,
         `Review handoff: cat HANDOFF.md`,

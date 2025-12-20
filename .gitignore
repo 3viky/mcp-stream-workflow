@@ -40,3 +40,8 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Stream state (not committed to git)
+.project/.stream-state.json
+.project/.stream-state.json.tmp.*
+.project/.stream-state.lock/
