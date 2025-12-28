@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+# Pre-commit hook: Prevent direct commits to main branch
+#
+# This hook enforces the stream workflow by blocking commits to main
+# outside of the merge process. All work should be done in worktrees.
+#
+
+# Get current branch
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "HEAD")
+
+# Check if we're in main
+if [ "$BRANCH" = "main" ]; then
+  # Check if this is a worktree merge (allowed)
+  if [ -f .git/MERGE_HEAD ]; then
+    echo "✓ Merge commit to main (allowed)"
+    exit 0
+  fi
+
+  # Check if we're in the main directory (not a worktree)
+  if [ ! -f .git ] || [ -d .git ]; then
+    cat >&2 <<'EOFMSG'
+
+❌ BLOCKED: Direct commits to main branch are not allowed
+
+The stream workflow requires all work to be done in worktrees:
+
+  1. Create a stream:
+     mcp__stream-workflow__start_stream
+
+  2. Work in the worktree (path from config.WORKTREE_ROOT):
+     cd <WORKTREE_ROOT>/stream-XXXX
+
+  3. Merge when ready:
+     mcp__stream-workflow__prepare_merge
+     mcp__stream-workflow__complete_merge
+
+Why this rule exists:
+- Prevents accidental data loss (like Dec 11 incident)
+- Ensures merge protection is active
+- Maintains clean git history
+- Enables proper conflict resolution
+
+To bypass this check (DANGEROUS - only for emergencies):
+  git commit --no-verify
+
+EOFMSG
+    exit 1
+  fi
+fi
+
+exit 0

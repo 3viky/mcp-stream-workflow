@@ -1,0 +1,18 @@
+{
+  "streamId": "{{STREAM_ID}}",
+  "streamNumber": {{STREAM_NUMBER}},
+  "title": "{{STREAM_TITLE}}",
+  "category": "{{CATEGORY}}",
+  "priority": "{{PRIORITY}}",
+  "status": "initializing",
+  "createdAt": "{{CREATED_AT}}",
+  "updatedAt": "{{UPDATED_AT}}",
+  "completedAt": null,
+  "branch": "{{BRANCH_NAME}}",
+  "worktreePath": "{{WORKTREE_PATH}}",
+  "phases": {{PHASES_JSON}},
+  "currentPhase": null,
+  "progress": 0,
+  "tags": {{TAGS_JSON}},
+  "blockedReason": null
+}

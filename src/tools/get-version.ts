@@ -1,0 +1,54 @@
+/**
+ * get_version - Version information tool
+ *
+ * Returns version, build info, and capabilities of the MCP server.
+ * Use this to verify which version of the MCP server is running.
+ */
+
+import { createVersionInfo } from '@3viky/mcp-common';
+
+import type { MCPResponse } from '../types.js';
+
+export async function getVersion(): Promise<MCPResponse> {
+  try {
+    const versionInfo = {
+      ...createVersionInfo(import.meta.url),
+      tools: [
+        'get_version - Get version and capabilities (safe, read-only)',
+        'start_stream - Initialize new development stream',
+        'verify_location - Verify worktree location (safe, read-only)',
+        'prepare_merge - Merge main into worktree with conflict resolution',
+        'complete_merge - Fast-forward merge worktree to main',
+        'complete_stream - Archive and cleanup completed stream',
+      ],
+      toolMetadata: {
+        safeToCall: ['get_version', 'verify_location'],
+        requiresUserApproval: ['prepare_merge', 'complete_merge', 'complete_stream'],
+        runInMain: ['start_stream'],
+        runInWorktree: ['verify_location', 'prepare_merge', 'complete_merge', 'complete_stream'],
+      },
+    };
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(versionInfo, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            error: 'Failed to read version information',
+            details: errorMessage,
+          }, null, 2),
+        },
+      ],
+    };
+  }
+}

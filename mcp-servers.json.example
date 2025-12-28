@@ -1,0 +1,100 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-servers.json",
+  "mcpServers": {
+    "stream-workflow-manager": {
+      "command": "node",
+      "args": [
+        ".claude/mcp-servers/stream-workflow-manager/dist/server.js"
+      ],
+      "env": {
+        "PROJECT_ROOT": "/path/to/your/project",
+        "WORKTREE_ROOT": "/path/to/your/worktrees",
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+
+        // ========================================================================
+        // DEVELOPER_MODE (Optional)
+        // ========================================================================
+        //
+        // Set to "true" to enable self-modification features for MCP development.
+        //
+        // When enabled:
+        //   - MCP tool responses include self-improvement instructions
+        //   - Agents receive extension points and update workflows
+        //   - Error messages include fix instructions for the MCP server itself
+        //
+        // When disabled (default):
+        //   - Clean, user-focused tool responses
+        //   - No instructions for modifying the MCP server
+        //   - Usage-focused error messages
+        //
+        // For MCP development only. Regular users should omit this.
+        // See: DEVELOPMENT.md for complete developer guide
+        //
+        // "DEVELOPER_MODE": "true"
+      },
+      "metadata": {
+        "description": "AI-powered worktree workflow automation",
+        "version": "0.1.0",
+        "sourceCode": ".claude/mcp-servers/stream-workflow-manager/",
+        "documentation": {
+          "user": "README.md",
+          "developer": "DEVELOPMENT.md"
+        },
+        "capabilities": [
+          "worktree-enforcement",
+          "ai-conflict-resolution",
+          "bidirectional-merge",
+          "stream-lifecycle-management",
+          "atomic-operations",
+          "self-documenting-errors"
+        ]
+      }
+    }
+  }
+}
+
+// ============================================================================
+// CONFIGURATION EXAMPLES
+// ============================================================================
+
+// Example 1: Regular User Configuration (Recommended)
+// {
+//   "stream-workflow-manager": {
+//     "command": "node",
+//     "args": [".claude/mcp-servers/stream-workflow-manager/dist/server.js"],
+//     "env": {
+//       "PROJECT_ROOT": "/path/to/your/project",
+//       "WORKTREE_ROOT": "/path/to/your/worktrees",
+//       "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+//     }
+//   }
+// }
+
+// Example 2: Developer Configuration (MCP Server Development)
+// {
+//   "stream-workflow-manager": {
+//     "command": "node",
+//     "args": [".claude/mcp-servers/stream-workflow-manager/dist/server.js"],
+//     "env": {
+//       "PROJECT_ROOT": "/path/to/your/project",
+//       "WORKTREE_ROOT": "/path/to/your/worktrees",
+//       "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+//       "DEVELOPER_MODE": "true"
+//     }
+//   }
+// }
+
+// Example 3: Advanced Configuration
+// {
+//   "stream-workflow-manager": {
+//     "command": "node",
+//     "args": [".claude/mcp-servers/stream-workflow-manager/dist/server.js"],
+//     "env": {
+//       "PROJECT_ROOT": "/path/to/your/project",
+//       "WORKTREE_ROOT": "/path/to/your/worktrees",
+//       "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+//       "DEVELOPER_MODE": "true",
+//       "ANTHROPIC_MODEL": "claude-opus-4-5-20251101"
+//     }
+//   }
+// }

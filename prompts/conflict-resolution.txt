@@ -1,0 +1,255 @@
+# Merge Conflict Resolution Task
+
+You are resolving a merge conflict in the egirl-platform codebase.
+
+## Context
+- **Stream**: {{streamId}}
+- **Stream Purpose**: {{streamPurpose}}
+- **File**: {{filePath}}
+- **Conflict Type**: {{conflictType}}
+
+## Main Branch Version (OURS)
+```{{fileExtension}}
+{{oursContent}}
+```
+
+**Main Branch Commits** (what main was doing):
+{{#mainCommits}}
+- {{hash}} {{message}} ({{author}}, {{date}})
+{{/mainCommits}}
+
+## Stream Branch Version (THEIRS)
+```{{fileExtension}}
+{{theirsContent}}
+```
+
+**Stream Commits** (what this stream was doing):
+{{#streamCommits}}
+- {{hash}} {{message}} ({{author}}, {{date}})
+{{/streamCommits}}
+
+## Raw Conflict (with markers)
+```{{fileExtension}}
+{{conflictContent}}
+```
+
+---
+
+## Resolution Requirements
+
+### CRITICAL RULES (NEVER VIOLATE)
+
+1. **PRESERVE BOTH INTENTS** - Never discard intentional work from either side
+2. **UNDERSTAND CONTEXT** - Read commit messages to understand WHY each change was made
+3. **INTEGRATE THOUGHTFULLY** - Combine both changes in a way that serves both purposes
+4. **MAINTAIN CORRECTNESS** - Ensure TypeScript types, imports, and syntax are valid
+5. **FOLLOW PATTERNS** - Use egirl-platform conventions
+
+### FORBIDDEN ACTIONS
+
+- ❌ Blindly choosing one side over the other (`git checkout --ours/--theirs`)
+- ❌ Removing features to avoid complexity
+- ❌ Commenting out code as a "resolution"
+- ❌ Leaving conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in the output
+- ❌ Adding explanatory comments about the conflict
+- ❌ Wrapping output in markdown code blocks
+
+---
+
+## egirl-platform Specific Patterns
+
+### For TypeScript/JavaScript Files
+
+**Imports:**
+- Merge both import lists (combine, deduplicate, alphabetize)
+- Preserve workspace package imports (`@transftw/*`)
+- Maintain import order: external → workspace → relative
+
+**Functions:**
+- If signature changed in main: Apply stream's logic to new signature
+- If both added same function name: Merge logic or rename one
+- Preserve type safety and JSDoc comments from both sides
+
+**Refactoring vs. Features:**
+- Main refactored, stream added feature → Apply feature to refactored code
+- Understand the refactoring's intent, then adapt feature to it
+
+### For JSON/YAML Configuration Files
+
+- Merge object keys (union of both)
+- For duplicate keys: Choose newer value (from stream if more recent)
+- Maintain proper JSON/YAML syntax
+- Preserve comments if format supports them
+
+### For Database Migrations
+
+**CRITICAL FOR MIGRATIONS:**
+- NEVER merge two migrations into one
+- NEVER change migration timestamps
+- BOTH migrations must run sequentially
+- If schema conflict: Ensure migrations are compatible or suggest manual review
+
+### For Theme System Files
+
+- Use existing theme tokens, don't hardcode colors
+- Follow `@transftw/theme-system` patterns
+- Preserve CSS-in-JS structure
+- Maintain responsive design patterns
+
+### For Markdown Documentation
+
+- Merge content sections logically
+- Preserve both sets of information
+- Maintain document structure
+- Update table of contents if present
+
+---
+
+## Conflict Resolution Strategy
+
+**Your workflow:**
+
+1. **Analyze Both Sides**
+   - What did main change and why? (read commit messages)
+   - What did stream change and why? (read commit messages)
+   - Are these compatible changes?
+
+2. **Identify Conflict Type**
+   - Same line modified differently?
+   - Same function/class modified?
+   - Structural refactoring vs. feature addition?
+   - Configuration merge?
+
+3. **Choose Resolution Approach**
+   - **Merge both**: Combine logic from both sides
+   - **Adapt one to other**: Apply feature to refactored code
+   - **Rename to avoid collision**: If both added same identifier
+   - **Reorder**: If both added imports/exports
+
+4. **Validate Result**
+   - TypeScript types are correct
+   - Imports are valid
+   - Syntax is correct
+   - Logic makes sense
+   - Both intents are preserved
+
+5. **Output Clean Resolution**
+   - NO conflict markers
+   - NO explanations
+   - NO markdown wrapping
+   - ONLY the resolved file content
+
+---
+
+## Examples of Good Resolutions
+
+### Example 1: Refactor + Feature
+
+**Main changed (refactor):**
+```typescript
+// Before: processPayment(amount: number)
+function processPayment(params: PaymentParams) {
+  const { amount, currency, provider } = params;
+  return provider.process(amount, currency);
+}
+```
+
+**Stream changed (feature):**
+```typescript
+function processPayment(amount: number) {
+  if (requiresEscrow(amount)) {
+    return initiateEscrow(amount);
+  }
+  return provider.process(amount);
+}
+```
+
+**Good resolution (feature on refactored signature):**
+```typescript
+function processPayment(params: PaymentParams) {
+  const { amount, currency, provider } = params;
+
+  if (requiresEscrow(amount)) {
+    return initiateEscrow({ amount, currency, provider });
+  }
+
+  return provider.process(amount, currency);
+}
+```
+
+### Example 2: Import Merge
+
+**Main added:**
+```typescript
+import { PaymentService } from '@transftw/payment-core';
+import { Logger } from './logger';
+```
+
+**Stream added:**
+```typescript
+import { EscrowService } from '@transftw/escrow';
+import { Logger } from './logger';
+```
+
+**Good resolution (merged, alphabetized):**
+```typescript
+import { EscrowService } from '@transftw/escrow';
+import { PaymentService } from '@transftw/payment-core';
+import { Logger } from './logger';
+```
+
+### Example 3: Configuration Merge
+
+**Main changed:**
+```json
+{
+  "features": {
+    "payments": true,
+    "analytics": true
+  }
+}
+```
+
+**Stream changed:**
+```json
+{
+  "features": {
+    "payments": true,
+    "escrow": true
+  }
+}
+```
+
+**Good resolution (merged keys):**
+```json
+{
+  "features": {
+    "payments": true,
+    "analytics": true,
+    "escrow": true
+  }
+}
+```
+
+---
+
+## Output Format
+
+**CRITICAL - READ CAREFULLY:**
+
+Provide ONLY the fully resolved file content.
+
+- NO explanations before or after
+- NO markdown code blocks (```)
+- NO conflict markers (<<<<<<<, =======, >>>>>>>)
+- NO comments explaining what you changed
+- NO "Here's the resolution:" preamble
+- JUST the resolved file content, exactly as it should be written to disk
+
+**The output will be written directly to `{{filePath}}`.**
+
+If your output contains anything other than the resolved file content, the resolution will FAIL.
+
+---
+
+Begin resolution now:

@@ -1,0 +1,130 @@
+name: Automated Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for version detection
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@3viky'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine version bump
+        id: version
+        run: |
+          # Get last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+
+          # Get commits since last tag
+          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
+          echo "Commits since last tag:"
+          echo "$COMMITS"
+
+          # Determine version bump type
+          BUMP_TYPE="none"
+
+          if echo "$COMMITS" | grep -qE "^(feat!|fix!|perf!|refactor!|BREAKING CHANGE)"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMITS" | grep -qE "^feat"; then
+            BUMP_TYPE="minor"
+          elif echo "$COMMITS" | grep -qE "^fix"; then
+            BUMP_TYPE="patch"
+          elif echo "$COMMITS" | grep -qE "^(chore|docs|style|refactor|perf|test|build|ci)"; then
+            # Non-release commits - only bump patch if no release yet
+            if [ "$LAST_TAG" = "v0.0.0" ]; then
+              BUMP_TYPE="patch"
+            fi
+          fi
+
+          echo "Bump type: $BUMP_TYPE"
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        if: steps.version.outputs.bump_type != 'none'
+        id: bump
+        run: |
+          BUMP_TYPE="${{ steps.version.outputs.bump_type }}"
+
+          # Bump version
+          npm version $BUMP_TYPE --no-git-tag-version
+
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        if: steps.version.outputs.bump_type != 'none'
+        run: npm run build
+
+      - name: Commit version bump
+        if: steps.version.outputs.bump_type != 'none'
+        run: |
+          NEW_VERSION="${{ steps.bump.new_version }}"
+          git add package.json package-lock.json
+          git commit -m "chore(release): v${NEW_VERSION} [skip ci]"
+          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+
+      - name: Push changes
+        if: steps.version.outputs.bump_type != 'none'
+        run: |
+          git push origin main
+          git push origin --tags
+
+      - name: Publish to GitHub Packages
+        if: steps.version.outputs.bump_type != 'none'
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.bump_type != 'none'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump.new_version }}
+          release_name: Release v${{ steps.bump.new_version }}
+          body: |
+            Automated release v${{ steps.bump.new_version }}
+
+            ## Installation
+
+            ```bash
+            npm install @3viky/mcp-common@${{ steps.bump.new_version }}
+            ```
+
+            ## Commits
+
+            See [commits](https://github.com/3viky/mcp-common/compare/v${{ steps.bump.new_version }}...main) for detailed changes.
+          draft: false
+          prerelease: false
+
+      - name: No release needed
+        if: steps.version.outputs.bump_type == 'none'
+        run: echo "No version bump needed - skipping release"

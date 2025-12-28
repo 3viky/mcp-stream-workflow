@@ -1,0 +1,30 @@
+{
+  "nextStreamId": 3,
+  "streams": {
+    "stream-001-test-feature": {
+      "streamId": "stream-001-test-feature",
+      "streamNumber": 1,
+      "title": "Test Feature",
+      "category": "backend",
+      "priority": "high",
+      "status": "active",
+      "createdAt": "2025-12-10T10:00:00.000Z",
+      "updatedAt": "2025-12-10T15:00:00.000Z",
+      "worktreePath": "/test/worktrees/stream-001-test-feature",
+      "branch": "stream-001-test-feature"
+    },
+    "stream-002-bug-fix": {
+      "streamId": "stream-002-bug-fix",
+      "streamNumber": 2,
+      "title": "Bug Fix",
+      "category": "frontend",
+      "priority": "critical",
+      "status": "blocked",
+      "createdAt": "2025-12-11T08:00:00.000Z",
+      "updatedAt": "2025-12-11T09:00:00.000Z",
+      "worktreePath": "/test/worktrees/stream-002-bug-fix",
+      "branch": "stream-002-bug-fix"
+    }
+  },
+  "lastSync": "2025-12-11T09:00:00.000Z"
+}
