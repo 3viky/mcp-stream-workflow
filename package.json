@@ -63,5 +63,10 @@
   "bugs": {
     "url": "https://github.com/3viky/mcp-stream-workflow/issues"
   },
-  "homepage": "https://github.com/3viky/mcp-stream-workflow#readme"
+  "homepage": "https://github.com/3viky/mcp-stream-workflow#readme",
+  "_": {
+    "registry": "github",
+    "publish": false,
+    "build": true
+  }
 }
